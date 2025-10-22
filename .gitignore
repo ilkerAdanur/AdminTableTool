@@ -1,0 +1,68 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extension files
+*.so
+
+venv_311
+
+# Virtual environment folders
+venv/
+venv_*/         # örneğin: venv_311 gibi
+env/
+.venv/
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+coverage.xml
+*.cover
+.hypothesis/
+
+# pyenv
+.python-version
+
+
+# VS Code settings
+.vscode/
+
+# PyCharm
+.idea/
+
+# MyPy
+.mypy_cache/
+
+# SQLite database (if used)
+*.sqlite3
+
+# Logs
+*.log
+
+# MacOS / Windows junk files
+.DS_Store
+Thumbs.db

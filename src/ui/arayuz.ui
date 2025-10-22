@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1026</width>
+    <height>650</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>MainWindow</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <widget class="QDateEdit" name="date_Baslangic">
+    <property name="geometry">
+     <rect>
+      <x>30</x>
+      <y>150</y>
+      <width>110</width>
+      <height>22</height>
+     </rect>
+    </property>
+    <property name="dateTime">
+     <datetime>
+      <hour>18</hour>
+      <minute>0</minute>
+      <second>0</second>
+      <year>2023</year>
+      <month>4</month>
+      <day>19</day>
+     </datetime>
+    </property>
+   </widget>
+   <widget class="QDateEdit" name="date_Bitis">
+    <property name="geometry">
+     <rect>
+      <x>150</x>
+      <y>150</y>
+      <width>110</width>
+      <height>22</height>
+     </rect>
+    </property>
+    <property name="dateTime">
+     <datetime>
+      <hour>18</hour>
+      <minute>0</minute>
+      <second>0</second>
+      <year>2023</year>
+      <month>4</month>
+      <day>20</day>
+     </datetime>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="btn_Sorgula">
+    <property name="geometry">
+     <rect>
+      <x>30</x>
+      <y>180</y>
+      <width>75</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Sorgulama</string>
+    </property>
+   </widget>
+   <widget class="QTableWidget" name="tbl_Veri">
+    <property name="geometry">
+     <rect>
+      <x>10</x>
+      <y>220</y>
+      <width>1011</width>
+      <height>381</height>
+     </rect>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="btn_Excel">
+    <property name="geometry">
+     <rect>
+      <x>120</x>
+      <y>180</y>
+      <width>131</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Excel Olarak Kaydet</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="btn_PDF">
+    <property name="geometry">
+     <rect>
+      <x>260</x>
+      <y>180</y>
+      <width>131</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>PDF Olarak Kaydet</string>
+    </property>
+   </widget>
+   <widget class="QComboBox" name="tarihSecCBox">
+    <property name="geometry">
+     <rect>
+      <x>590</x>
+      <y>180</y>
+      <width>151</width>
+      <height>21</height>
+     </rect>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="ileriTarihButton">
+    <property name="geometry">
+     <rect>
+      <x>750</x>
+      <y>180</y>
+      <width>75</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>İleri Button</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="geriTarihButton">
+    <property name="geometry">
+     <rect>
+      <x>830</x>
+      <y>180</y>
+      <width>75</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Geri Button</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="veritabaniLabel">
+    <property name="geometry">
+     <rect>
+      <x>30</x>
+      <y>20</y>
+      <width>361</width>
+      <height>121</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>16</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>Veritabanı ve Tablo</string>
+    </property>
+   </widget>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1026</width>
+     <height>22</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuAna_Sayfa">
+    <property name="title">
+     <string>Ana Sayfa</string>
+    </property>
+   </widget>
+   <widget class="QMenu" name="menuAyarlar">
+    <property name="title">
+     <string>Ayarlar</string>
+    </property>
+   </widget>
+   <widget class="QMenu" name="menuVeritaban">
+    <property name="title">
+     <string>Veritabanı</string>
+    </property>
+    <addaction name="actionVeritaban_T_r_Se_iniz"/>
+    <addaction name="actionVeritaban_n_Se"/>
+   </widget>
+   <addaction name="menuAna_Sayfa"/>
+   <addaction name="menuAyarlar"/>
+   <addaction name="menuVeritaban"/>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+  <action name="actionVeritaban_T_r_Se_iniz">
+   <property name="text">
+    <string>Veritabanı Türü Seçiniz</string>
+   </property>
+  </action>
+  <action name="actionVeritaban_n_Se">
+   <property name="text">
+    <string>Veritabanını Seç</string>
+   </property>
+  </action>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
