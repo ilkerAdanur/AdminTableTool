@@ -6,165 +6,173 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1026</width>
-    <height>650</height>
+    <width>1131</width>
+    <height>689</height>
    </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>500</width>
+    <height>500</height>
+   </size>
   </property>
   <property name="windowTitle">
    <string>MainWindow</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <widget class="QDateEdit" name="date_Baslangic">
-    <property name="geometry">
-     <rect>
-      <x>30</x>
-      <y>150</y>
-      <width>110</width>
-      <height>22</height>
-     </rect>
-    </property>
-    <property name="dateTime">
-     <datetime>
-      <hour>18</hour>
-      <minute>0</minute>
-      <second>0</second>
-      <year>2023</year>
-      <month>4</month>
-      <day>19</day>
-     </datetime>
-    </property>
-   </widget>
-   <widget class="QDateEdit" name="date_Bitis">
-    <property name="geometry">
-     <rect>
-      <x>150</x>
-      <y>150</y>
-      <width>110</width>
-      <height>22</height>
-     </rect>
-    </property>
-    <property name="dateTime">
-     <datetime>
-      <hour>18</hour>
-      <minute>0</minute>
-      <second>0</second>
-      <year>2023</year>
-      <month>4</month>
-      <day>20</day>
-     </datetime>
-    </property>
-   </widget>
-   <widget class="QPushButton" name="btn_Sorgula">
-    <property name="geometry">
-     <rect>
-      <x>30</x>
-      <y>180</y>
-      <width>75</width>
-      <height>24</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Sorgulama</string>
-    </property>
-   </widget>
-   <widget class="QTableWidget" name="tbl_Veri">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>220</y>
-      <width>1011</width>
-      <height>381</height>
-     </rect>
-    </property>
-   </widget>
-   <widget class="QPushButton" name="btn_Excel">
-    <property name="geometry">
-     <rect>
-      <x>120</x>
-      <y>180</y>
-      <width>131</width>
-      <height>24</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Excel Olarak Kaydet</string>
-    </property>
-   </widget>
-   <widget class="QPushButton" name="btn_PDF">
-    <property name="geometry">
-     <rect>
-      <x>260</x>
-      <y>180</y>
-      <width>131</width>
-      <height>24</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>PDF Olarak Kaydet</string>
-    </property>
-   </widget>
-   <widget class="QComboBox" name="tarihSecCBox">
-    <property name="geometry">
-     <rect>
-      <x>590</x>
-      <y>180</y>
-      <width>151</width>
-      <height>21</height>
-     </rect>
-    </property>
-   </widget>
-   <widget class="QPushButton" name="ileriTarihButton">
-    <property name="geometry">
-     <rect>
-      <x>750</x>
-      <y>180</y>
-      <width>75</width>
-      <height>24</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>İleri Button</string>
-    </property>
-   </widget>
-   <widget class="QPushButton" name="geriTarihButton">
-    <property name="geometry">
-     <rect>
-      <x>830</x>
-      <y>180</y>
-      <width>75</width>
-      <height>24</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Geri Button</string>
-    </property>
-   </widget>
-   <widget class="QLabel" name="veritabaniLabel">
-    <property name="geometry">
-     <rect>
-      <x>30</x>
-      <y>20</y>
-      <width>361</width>
-      <height>121</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <pointsize>16</pointsize>
-     </font>
-    </property>
-    <property name="text">
-     <string>Veritabanı ve Tablo</string>
-    </property>
-   </widget>
+   <layout class="QVBoxLayout" name="verticalLayout_Main">
+    <item>
+     <widget class="QLabel" name="veritabaniLabel">
+      <property name="minimumSize">
+       <size>
+        <width>400</width>
+        <height>0</height>
+       </size>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>16777215</width>
+        <height>80</height>
+       </size>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>16</pointsize>
+       </font>
+      </property>
+      <property name="text">
+       <string>Veritabanı ve Tablo</string>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+      </property>
+      <property name="wordWrap">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="horizontalLayout_Dates">
+      <item>
+       <widget class="QDateEdit" name="date_Baslangic">
+        <property name="dateTime">
+         <datetime>
+          <hour>18</hour>
+          <minute>0</minute>
+          <second>0</second>
+          <year>2023</year>
+          <month>4</month>
+          <day>19</day>
+         </datetime>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QDateEdit" name="date_Bitis">
+        <property name="dateTime">
+         <datetime>
+          <hour>18</hour>
+          <minute>0</minute>
+          <second>0</second>
+          <year>2023</year>
+          <month>4</month>
+          <day>20</day>
+         </datetime>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer_Dates">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="horizontalLayout_Buttons">
+      <item>
+       <widget class="QPushButton" name="btn_Sorgula">
+        <property name="text">
+         <string>Sorgulama</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_Excel">
+        <property name="text">
+         <string>Excel Olarak Kaydet</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_PDF">
+        <property name="text">
+         <string>PDF Olarak Kaydet</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer_Buttons">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeType">
+         <enum>QSizePolicy::Expanding</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QComboBox" name="tarihSecCBox"/>
+      </item>
+      <item>
+       <widget class="QPushButton" name="geriTarihButton">
+        <property name="text">
+         <string>Geri Button</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="ileriTarihButton">
+        <property name="text">
+         <string>İleri Button</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <widget class="QTableWidget" name="tbl_Veri">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+     </widget>
+    </item>
+   </layout>
   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1026</width>
-     <height>22</height>
+     <width>1131</width>
+     <height>26</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuAna_Sayfa">
@@ -181,7 +189,17 @@
     <property name="title">
      <string>Veritabanı</string>
     </property>
-    <addaction name="actionVeritaban_T_r_Se_iniz"/>
+    <widget class="QMenu" name="menuVeritaban_T_r_Se_iniz">
+     <property name="title">
+      <string>Veritabanı Sistemleri</string>
+     </property>
+     <addaction name="actionMicrosoft_SQL"/>
+     <addaction name="actionPostgreSQL"/>
+     <addaction name="actionOracle_Database"/>
+     <addaction name="actionAccess_Database"/>
+     <addaction name="actionMySQL"/>
+    </widget>
+    <addaction name="menuVeritaban_T_r_Se_iniz"/>
     <addaction name="actionVeritaban_n_Se"/>
    </widget>
    <addaction name="menuAna_Sayfa"/>
@@ -189,14 +207,39 @@
    <addaction name="menuVeritaban"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
-  <action name="actionVeritaban_T_r_Se_iniz">
-   <property name="text">
-    <string>Veritabanı Türü Seçiniz</string>
-   </property>
-  </action>
   <action name="actionVeritaban_n_Se">
    <property name="text">
     <string>Veritabanını Seç</string>
+   </property>
+  </action>
+  <action name="actionSQL_Server">
+   <property name="text">
+    <string>SQL Server</string>
+   </property>
+  </action>
+  <action name="actionMicrosoft_SQL">
+   <property name="text">
+    <string>Microsoft SQL</string>
+   </property>
+  </action>
+  <action name="actionPostgreSQL">
+   <property name="text">
+    <string>PostgreSQL</string>
+   </property>
+  </action>
+  <action name="actionOracle_Database">
+   <property name="text">
+    <string>Oracle Database</string>
+   </property>
+  </action>
+  <action name="actionAccess_Database">
+   <property name="text">
+    <string>Access Database </string>
+   </property>
+  </action>
+  <action name="actionMySQL">
+   <property name="text">
+    <string>MySQL</string>
    </property>
   </action>
  </widget>
