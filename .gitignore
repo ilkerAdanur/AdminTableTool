@@ -50,7 +50,7 @@ coverage.xml
 
 # VS Code settings
 .vscode/
-
+.vs
 # PyCharm
 .idea/
 

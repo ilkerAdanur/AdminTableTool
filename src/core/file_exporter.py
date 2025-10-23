@@ -1,50 +1,80 @@
-def get_yeni_kayit_yolu(self, format):
+# src/core/file_exporter.py
+
+import os
+from datetime import datetime
+import pandas as pd
+
+# PDF ile ilgili tüm importları buraya taşıyoruz
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+from reportlab.lib.pagesizes import landscape, A4
+from reportlab.lib import colors
+
+def get_yeni_kayit_yolu(format, start_date_obj, end_date_obj, target_table):
     """
-    Dinamik kayıt yolu ve 'TABLO(BAŞLANGIÇ-BİTİŞ)' formatında dosya adı oluşturan fonksiyon.
-    Eğer dosya varsa 'TABLO(BAŞLANGIÇ-BİTİŞ) (1).xlsx' şeklinde devam eder.
+    Dinamik kayıt yolu ve 'TABLO(BAŞLANGIÇ-BİTİŞ)' formatında dosya adı oluşturur.
+    Bu fonksiyon artık 'self' kullanmaz, ihtiyaç duyduğu her şeyi parametre olarak alır.
     """
     try:
-        # 1. Ana klasörler
         base_folder = r"C:\rapor" 
         format_folder = os.path.join(base_folder, format)
-        
-        # 2. Tarihleri al ve istediğin 'DD.MM.YYYY' formatına çevir
-        start_date_obj = self.date_Baslangic.date().toPyDate()
-        end_date_obj = self.date_Bitis.date().toPyDate()
-        
+
+        # Tarihleri al ve 'DD.MM.YYYY' formatına çevir
         start_str = start_date_obj.strftime("%d.%m.%Y")
         end_str = end_date_obj.strftime("%d.%m.%Y")
-        
-        # 3. Klasör yolu için tarihleri al (YIL\GUN_AY)
+
+        # Klasör yolu için tarihleri al (YIL\GUN_AY)
         yil = start_date_obj.strftime("%Y")
         gun_ay = start_date_obj.strftime("%d_%m")
-        
-        # 4. Tablo adını al (Bağlantı yoksa 'Rapor' olarak varsay)
-        table_name = self.target_table if self.target_table else "Rapor"
-        
-        # 5. İstenen formatta ana dosya adını oluştur
-        # (Dosya adlarında / \ : * ? " < > | gibi karakterler olamaz, 
-        #  ama bizim formatımız (DD.MM.YYYY) buna uygun.)
+
+        table_name = target_table if target_table else "Rapor"
+
         base_filename = f"{table_name}({start_str}-{end_str})"
-        
-        # 6. Kayıt klasörünü oluştur
+
         tam_klasor_yolu = os.path.join(format_folder, yil, gun_ay)
         os.makedirs(tam_klasor_yolu, exist_ok=True)
-        
-        # 7. Dosya adı çakışmasını kontrol et
+
         uzanti = "xlsx" if format == "excel" else "pdf"
-        dosya_adi = f"{base_filename}.{uzanti}" # Örn: "DEBILER(1.01.2024-4.01.2024).xlsx"
+        dosya_adi = f"{base_filename}.{uzanti}"
         tam_dosya_yolu = os.path.join(tam_klasor_yolu, dosya_adi)
-        
+
         sayac = 1
-        # Döngü: Dosya zaten varsa, adını (1), (2) diye değiştir
         while os.path.exists(tam_dosya_yolu):
-            dosya_adi = f"{base_filename} ({sayac}).{uzanti}" # Örn: "DEBILER(1.01.2024-4.01.2024) (1).xlsx"
+            dosya_adi = f"{base_filename} ({sayac}).{uzanti}"
             tam_dosya_yolu = os.path.join(tam_klasor_yolu, dosya_adi)
             sayac += 1
-            
+
         return tam_dosya_yolu
-        
     except Exception as e:
-        QMessageBox.critical(self, "Hata", f"Kayıt yolu oluşturulamadı:\n{e}")
-        return None
+        print(f"Kayıt yolu oluşturulurken hata: {e}")
+        return None # Hata durumunda None döndür
+
+def task_run_excel(kayit_yolu, df_to_save):
+    """(Worker Görevi) ARKA PLANDA çalışacak Excel kaydetme işi."""
+    print(f"Çalışan iş parçacığı: Excel kaydetme başlatıldı -> {kayit_yolu}")
+    df_to_save.to_excel(kayit_yolu, index=False)
+    print("Çalışan iş parçacığı: Excel kaydetme bitti.")
+    return kayit_yolu
+
+def task_run_pdf(kayit_yolu, df_to_save):
+    """(Worker Görevi) ARKA PLANDA çalışacak PDF kaydetme işi."""
+    print(f"Çalışan iş parçacığı: PDF kaydetme başlatıldı -> {kayit_yolu}")
+
+    doc = SimpleDocTemplate(kayit_yolu, pagesize=landscape(A4))
+    data = [list(df_to_save.columns)] + df_to_save.values.tolist()
+    table = Table(data)
+
+    # Fontların ana uygulamada (register_pdf_fonts) yüklendiğini varsayar
+    style = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Arial_Bold'),
+        ('FONTNAME', (0, 1), (-1, -1), 'Arial'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ])
+    table.setStyle(style)
+    doc.build([table])
+    print("Çalışan iş parçacığı: PDF kaydetme bitti.")
+    return kayit_yolu

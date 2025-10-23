@@ -6,9 +6,7 @@ from src.core.utils import register_pdf_fonts # (utils.py'ye taşıyacağız)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-
-    # register_pdf_fonts() # Fontları (eğer utils'e taşırsak) burada yükle
-
+    register_pdf_fonts()  # Register fonts for PDF generation
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
