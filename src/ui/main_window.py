@@ -94,27 +94,29 @@ class MainWindow(QMainWindow):
 
     def update_connection_status(self):
         """Bağlantı durumunu (ışık), etiketleri ve butonların aktifliğini günceller."""
-
+        
         is_connected = bool(self.db_config and self.target_table)
-
+        
         label_text = ""
         style = ""
         tooltip = ""
         db_type = self.db_config.get('type', 'Yok')
-
+        
         if is_connected:
-            style = "background-color: #4CAF50; ..." # (Yeşil stil kodu)
-
+            # 1. Işığı YEŞİL yap (Stil kodu tamamlandı)
+            style = "background-color: #4CAF50; border-radius: 6px; min-width: 12px; max-width: 12px; min-height: 12px; max-height: 12px;"
+            
             # Etiket metnini güncelle
             label_text = f"Sistem: {db_type.capitalize()}  |  Tablo: {self.target_table}"
             tooltip = f"BAĞLANDI\nSistem: {db_type}\nTablo: {self.target_table}"
-
+            
             self.btn_Sorgula.setEnabled(True)
             self.date_Baslangic.setEnabled(True)
             self.date_Bitis.setEnabled(True)
         else:
-            style = "background-color: #F44336; ..." # (Kırmızı stil kodu)
-
+            # 1. Işığı KIRMIZI yap (Stil kodu tamamlandı)
+            style = "background-color: #F44336; border-radius: 6px; min-width: 12px; max-width: 12px; min-height: 12px; max-height: 12px;"
+            
             # Etiket metnini güncelle
             label_text = f"Bağlı Değil. (Seçili Sistem: {db_type.capitalize()})"
             tooltip = "BAĞLI DEĞİL\nLütfen 'Veritabanı' menüsünden bağlantı kurun."
@@ -124,16 +126,17 @@ class MainWindow(QMainWindow):
             self.date_Bitis.setEnabled(False)
             self.btn_Excel.setEnabled(False)
             self.btn_PDF.setEnabled(False)
-
-        # (Işığı ve etiketi ayarla - stil kodunu tamamlarsınız)
+        
+        # Işığı ve etiketi ayarla
         self.status_light.setStyleSheet(style)
         self.status_light.setToolTip(tooltip)
-
+        
         try:
             self.veritabaniLabel.setText(label_text)
         except AttributeError:
             pass # Label yoksa devam et
-
+        
+        # Excel/PDF butonları SADECE sorgu yapıldıktan sonra (self.df doluysa) açılmalı
         if is_connected and not self.df.empty:
             self.btn_Excel.setEnabled(True)
             self.btn_PDF.setEnabled(True)

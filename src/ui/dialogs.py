@@ -1,11 +1,11 @@
 # src/ui/dialogs.py
-
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QLineEdit, 
     QPushButton, QDialogButtonBox, QLabel, QWidget,
-    QFileDialog
+    QFileDialog, QHBoxLayout  
 )
 from PyQt6.QtCore import Qt
+
 
 class ConnectionDialog(QDialog):
     """
