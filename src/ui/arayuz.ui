@@ -12,12 +12,12 @@
   </property>
   <property name="minimumSize">
    <size>
-    <width>500</width>
+    <width>600</width>
     <height>500</height>
    </size>
   </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>Dinamik Raporlama Aracı</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout_Main">
@@ -32,19 +32,19 @@
       <property name="maximumSize">
        <size>
         <width>16777215</width>
-        <height>80</height>
+        <height>60</height>
        </size>
       </property>
       <property name="font">
        <font>
-        <pointsize>16</pointsize>
+        <pointsize>12</pointsize>
        </font>
       </property>
       <property name="text">
        <string>Veritabanı ve Tablo</string>
       </property>
       <property name="alignment">
-       <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+       <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
       </property>
       <property name="wordWrap">
        <bool>true</bool>
@@ -54,16 +54,33 @@
     <item>
      <layout class="QHBoxLayout" name="horizontalLayout_Dates">
       <item>
+       <widget class="QLabel" name="labelBaslangic">
+        <property name="text">
+         <string>Başlangıç Tarihi:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QDateEdit" name="date_Baslangic">
         <property name="dateTime">
          <datetime>
-          <hour>18</hour>
+          <hour>0</hour>
           <minute>0</minute>
           <second>0</second>
-          <year>2023</year>
-          <month>4</month>
-          <day>19</day>
+          <year>2024</year>
+          <month>1</month>
+          <day>1</day>
          </datetime>
+        </property>
+        <property name="calendarPopup">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="labelBitis">
+        <property name="text">
+         <string>Bitiş Tarihi:</string>
         </property>
        </widget>
       </item>
@@ -71,13 +88,16 @@
        <widget class="QDateEdit" name="date_Bitis">
         <property name="dateTime">
          <datetime>
-          <hour>18</hour>
+          <hour>0</hour>
           <minute>0</minute>
           <second>0</second>
-          <year>2023</year>
-          <month>4</month>
-          <day>20</day>
+          <year>2024</year>
+          <month>1</month>
+          <day>31</day>
          </datetime>
+        </property>
+        <property name="calendarPopup">
+         <bool>true</bool>
         </property>
        </widget>
       </item>
@@ -101,21 +121,21 @@
       <item>
        <widget class="QPushButton" name="btn_Sorgula">
         <property name="text">
-         <string>Sorgulama</string>
+         <string>Rapor Al</string>
         </property>
        </widget>
       </item>
       <item>
        <widget class="QPushButton" name="btn_Excel">
         <property name="text">
-         <string>Excel Olarak Kaydet</string>
+         <string>Excel'e Aktar</string>
         </property>
        </widget>
       </item>
       <item>
        <widget class="QPushButton" name="btn_PDF">
         <property name="text">
-         <string>PDF Olarak Kaydet</string>
+         <string>PDF'e Aktar</string>
         </property>
        </widget>
       </item>
@@ -136,19 +156,56 @@
        </spacer>
       </item>
       <item>
-       <widget class="QComboBox" name="tarihSecCBox"/>
+       <widget class="QLabel" name="labelTaslak">
+        <property name="text">
+         <string>Rapor Taslağı:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="templateSecCBox">
+        <property name="minimumSize">
+         <size>
+          <width>150</width>
+          <height>0</height>
+         </size>
+        </property>
+        <property name="toolTip">
+         <string>Kullanılacak rapor taslağını seçin (Ayarlar menüsünden oluşturulur)</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_ApplyTemplate">
+        <property name="text">
+         <string>Taslağı Göster</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="tarihSecCBox">
+        <property name="toolTip">
+         <string>Kaydedilmiş Excel raporlarına göz atın</string>
+        </property>
+       </widget>
       </item>
       <item>
        <widget class="QPushButton" name="geriTarihButton">
+        <property name="toolTip">
+         <string>Seçili tarihteki önceki Excel raporunu göster</string>
+        </property>
         <property name="text">
-         <string>Geri Button</string>
+         <string>&lt; Önceki</string>
         </property>
        </widget>
       </item>
       <item>
        <widget class="QPushButton" name="ileriTarihButton">
+        <property name="toolTip">
+         <string>Seçili tarihteki sonraki Excel raporunu göster</string>
+        </property>
         <property name="text">
-         <string>İleri Button</string>
+         <string>Sonraki &gt;</string>
         </property>
        </widget>
       </item>
@@ -161,6 +218,15 @@
         <horstretch>0</horstretch>
         <verstretch>0</verstretch>
        </sizepolicy>
+      </property>
+      <property name="editTriggers">
+       <set>QAbstractItemView::NoEditTriggers</set>
+      </property>
+      <property name="alternatingRowColors">
+       <bool>true</bool>
+      </property>
+      <property name="selectionBehavior">
+       <enum>QAbstractItemView::SelectRows</enum>
       </property>
      </widget>
     </item>
@@ -184,6 +250,7 @@
     <property name="title">
      <string>Ayarlar</string>
     </property>
+    <addaction name="actionTaslak_Duzenle"/>
    </widget>
    <widget class="QMenu" name="menuVeritaban">
     <property name="title">
@@ -202,14 +269,21 @@
     <addaction name="menuVeritaban_T_r_Se_iniz"/>
     <addaction name="actionVeritaban_n_Se"/>
    </widget>
+   <widget class="QMenu" name="menuProfil">
+    <property name="title">
+     <string>Profil</string>
+    </property>
+    <addaction name="actionAdmin_Giri_i"/>
+   </widget>
    <addaction name="menuAna_Sayfa"/>
    <addaction name="menuAyarlar"/>
    <addaction name="menuVeritaban"/>
+   <addaction name="menuProfil"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <action name="actionVeritaban_n_Se">
    <property name="text">
-    <string>Veritabanını Seç</string>
+    <string>Veritabanını Seç / Değiştir...</string>
    </property>
   </action>
   <action name="actionSQL_Server">
@@ -240,6 +314,16 @@
   <action name="actionMySQL">
    <property name="text">
     <string>MySQL</string>
+   </property>
+  </action>
+  <action name="actionAdmin_Giri_i">
+   <property name="text">
+    <string>Admin Girişi</string>
+   </property>
+  </action>
+  <action name="actionTaslak_Duzenle">
+   <property name="text">
+    <string>Rapor Taslaklarını Yönet...</string>
    </property>
   </action>
  </widget>

@@ -2,14 +2,17 @@ import sys
 import os
 import re
 import traceback
-import urllib.parse
 from datetime import datetime
 import functools
+
+from src.core.database import get_database_tables # Bunu zaten import ediyor olmalısınız
+
+from src.ui.dialogs import TemplateEditorDialog
 
 from PyQt6.QtCore import QThreadPool, Qt
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QTableWidgetItem,
-    QMessageBox, QProgressDialog, QFileDialog, QInputDialog, QLabel
+    QMessageBox, QProgressDialog, QFileDialog, QInputDialog, QLabel,QDialog
 )
 from PyQt6.uic import loadUi
 
@@ -17,10 +20,17 @@ from src.ui.dialogs import ConnectionDialog
 
 import pandas as pd
 
+from src.core.database import create_db_engine,inspect
+
 from src.threading.workers import Worker, WorkerSignals
 from src.core.database import get_database_tables, run_database_query, load_excel_file
 from src.core.file_exporter import get_yeni_kayit_yolu, task_run_excel, task_run_pdf
 from src.core.utils import register_pdf_fonts
+from src.core.template_manager import get_available_templates
+
+from src.core.data_processor import apply_template
+from src.core.template_manager import load_template
+
 
 # --- Doğal Sıralama ---
 def natural_sort_key(s):
@@ -43,9 +53,9 @@ class MainWindow(QMainWindow):
         self.db_path = None
         self.target_table = None
 
-        self.db_config = {}       # Artık db_path yerine tüm ayarları tutan bir sözlük
-        self.db_engine = None     # Başarılı bağlantıdan sonra motoru (engine) saklayabiliriz
-        self.target_table = None  # Kullanıcının seçtiği tablo adı
+        self.db_config = {}       
+        self.db_engine = None     
+        self.target_table = None  
 
         self.threadpool = QThreadPool()
         print(f"Multithreading için {self.threadpool.maxThreadCount()} adet iş parçacığı mevcut.")
@@ -59,8 +69,16 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         
+        try:
+             self.actionTaslak_Duzenle.triggered.connect(self.open_template_editor)
+        except AttributeError:
+             print("UYARI: 'actionTaslak_Duzenle' menü eylemi .ui dosyasında bulunamadı.")
 
-        # Connect UI signals
+        try:
+            self.btn_ApplyTemplate.clicked.connect(self.apply_selected_template) 
+        except AttributeError:
+            print("UYARI: 'btn_ApplyTemplate' butonu .ui dosyasında bulunamadı.")
+
         try:
             self.btn_Sorgula.clicked.connect(self.sorgulama_yap)
             self.btn_Excel.clicked.connect(self.export_excel)
@@ -90,7 +108,192 @@ class MainWindow(QMainWindow):
 
         self.update_connection_status()
         self.kayitli_raporlari_tara()
+        self._load_available_templates()
 
+    def apply_selected_template(self):
+        """ 'Taslağı Uygula' butonuna basıldığında çalışır."""
+
+        if not self.db_config or not self.target_table:
+            QMessageBox.warning(self, "Bağlantı Yok", "Lütfen önce bir veritabanı ve tablo seçin.")
+            return
+
+        selected_template_name = self.templateSecCBox.currentText()
+        selected_template_data = self.templateSecCBox.currentData() 
+
+        is_raw_data_selected = (selected_template_data is None) 
+
+        if not is_raw_data_selected and not selected_template_name:
+            QMessageBox.warning(self, "Taslak Seçilmedi", "Lütfen 'Rapor Taslağı' listesinden bir taslak seçin.")
+            return
+
+        baslangic = self.date_Baslangic.date().toString("yyyy-MM-dd")
+        bitis = self.date_Bitis.date().toString("yyyy-MM-dd")
+
+        if is_raw_data_selected:
+            self.show_loading_dialog("Ham veri getiriliyor...")
+        else:
+            self.show_loading_dialog(f"'{selected_template_name}' taslağı uygulanıyor...")
+
+        worker = Worker(self._task_fetch_and_apply, 
+                        self.db_config, 
+                        self.target_table, 
+                        baslangic, 
+                        bitis, 
+                        None if is_raw_data_selected else selected_template_name) 
+
+        worker.signals.finished.connect(self._on_template_applied) 
+        worker.signals.error.connect(self._on_task_error)
+        self.threadpool.start(worker)
+
+
+    def _on_template_applied(self, processed_df):
+        """(Callback) Worker'dan gelen SONUCU (işlenmiş veya ham) tabloya yükler."""
+
+        print("Ana arayüz: İşlenmiş veri alındı. Tablo dolduruluyor...")
+
+        self.df = processed_df 
+
+        self.tabloyu_doldur(self.df) 
+
+        self.update_connection_status()
+
+        self.close_loading_dialog() 
+        print(f"Ana arayüz: İşlem tamamlandı ve sonuç tabloya yüklendi.")
+
+    def _task_fetch_and_apply(self, config, target_table, start_date, end_date, template_name):
+        """(Worker) Ham veriyi çeker, taslağı yükler ve uygular. (Hata ayıklama print'leri eklendi)"""
+        
+        print(f"\n--- Görev Başladı: _task_fetch_and_apply ---")
+        print(f"Alınan Parametreler:")
+        print(f"  config: {config}")
+        print(f"  target_table: {target_table}")
+        print(f"  start_date: {start_date}")
+        print(f"  end_date: {end_date}")
+        print(f"  template_name: {template_name}")
+        
+        try:
+            print("Çalışan iş parçacığı: Ham veri çekiliyor...")
+            raw_df = run_database_query(config, target_table, start_date, end_date)
+            print(f"Çalışan iş parçacığı: Ham veri çekildi. Boyut: {raw_df.shape}")
+
+            if not template_name:
+                print("Çalışan iş parçacığı: Taslak adı yok, ham veri döndürülüyor.")
+                print(f"--- Görev Bitti (Ham Veri): _task_fetch_and_apply ---\n")
+                return raw_df 
+                
+            print(f"Çalışan iş parçacığı: '{template_name}' taslağı yükleniyor...")
+            template_data = load_template(template_name=template_name) 
+            
+            if template_data:
+                 print(f"Çalışan iş parçacığı: Taslak başarıyla yüklendi.")
+            else:
+                 print(f"Çalışan iş parçacığı: Taslak yüklenemedi!")
+
+            if not template_data:
+                raise FileNotFoundError(f"'{template_name}' taslak dosyası bulunamadı veya yüklenemedi.")
+                
+            print("Çalışan iş parçacığı: Taslak uygulanıyor (apply_template çağrılıyor)...")
+            processed_df = apply_template(raw_df, template_data)
+            print(f"Çalışan iş parçacığı: Taslak uygulandı. Sonuç Boyutu: {processed_df.shape}")
+
+
+            print("Çalışan iş parçacığı: İşlem tamamlandı, işlenmiş veri döndürülüyor.")
+            print(f"--- Görev Bitti (İşlenmiş Veri): _task_fetch_and_apply ---\n")
+            return processed_df 
+
+        except Exception as e:
+             print(f"!!! HATA (_task_fetch_and_apply içinde): {e}")
+             traceback.print_exc() # Detaylı hata bilgisini yazdır
+             raise e
+
+    def _load_available_templates(self):
+        """ Kaydedilmiş taslakları tarar ve templateSecCBox'ı doldurur."""
+        print("Kullanılabilir taslaklar yükleniyor...")
+        self.templateSecCBox.blockSignals(True) 
+        self.templateSecCBox.clear()
+        
+        self.templateSecCBox.addItem("Taslak Uygulama (Varsayılan: Ham Veri)", userData=None) 
+        
+        templates = get_available_templates()
+        if templates:
+            for template_name in templates:
+                self.templateSecCBox.addItem(template_name, userData=template_name) 
+            # ----------------------------------------------
+            print(f"{len(templates)} adet taslak bulundu ve ComboBox'a eklendi.")
+        else:
+            print("Kaydedilmiş taslak bulunamadı.")
+            
+        self.templateSecCBox.blockSignals(False) 
+
+    def open_template_editor(self):
+        """Taslak Düzenleyici diyaloğunu açar."""
+        
+        source_cols = [] 
+        
+        if not self.df.empty:
+            source_cols = list(self.df.columns)
+            print(f"Kaynak sütunlar mevcut DataFrame'den alındı: {source_cols}")
+            
+            self._show_template_editor_dialog(source_cols)
+            
+        elif self.db_config and self.target_table:
+            print("DataFrame boş, kaynak sütunlar veritabanından çekilecek...")
+            self.show_loading_dialog("Kaynak sütunlar okunuyor...")
+            
+            worker = Worker(self._task_get_column_names, self.db_config, self.target_table)
+            worker.signals.finished.connect(self._on_columns_loaded_for_editor) 
+            worker.signals.error.connect(self._on_task_error) 
+            self.threadpool.start(worker)
+            
+        else:
+             QMessageBox.warning(self, "Bağlantı Gerekli", 
+                                 "Taslak düzenleyiciyi açmak için lütfen önce bir veritabanına bağlanın.")
+             return
+
+    def _task_get_column_names(self, config, target_table):
+        """(Worker) Sadece belirtilen tablonun sütun adlarını çeker."""
+        print(f"Çalışan iş parçacığı: '{target_table}' tablosunun sütunları çekiliyor...")
+        engine = create_db_engine(config) 
+        inspector = inspect(engine) 
+        
+        schema_name = None
+        table_only_name = target_table
+        if config.get('type') != 'access' and '.' in target_table:
+            schema_name, table_only_name = target_table.split('.', 1)
+            
+        columns_info = inspector.get_columns(table_only_name, schema=schema_name)
+        column_names = [col['name'] for col in columns_info]
+        
+        print(f"Çalışan iş parçacığı: Sütunlar bulundu: {column_names}")
+        return column_names
+
+
+    def _on_columns_loaded_for_editor(self, column_names):
+        """(Callback) Veritabanından sütun adları gelince Taslak Editörünü açar."""
+        self.close_loading_dialog()
+        if column_names:
+            print(f"Kaynak sütunlar veritabanından alındı: {column_names}")
+            self._show_template_editor_dialog(column_names)
+        else:
+            QMessageBox.warning(self, "Sütun Hatası", 
+                                 "Seçili tablonun sütun adları okunamadı.")
+
+
+    def _show_template_editor_dialog(self, source_columns):
+        """TemplateEditorDialog'u verilen kaynak sütunlarla açar ve sonucu işler."""
+        dialog = TemplateEditorDialog(source_columns=source_columns, parent=self)
+        result = dialog.exec() 
+
+        if result == QDialog.DialogCode.Accepted: 
+            template_data = dialog.get_template_data()
+            print("Alınan Taslak Verisi:", template_data)
+            self._load_available_templates() 
+            if template_data and template_data.get("template_name"):
+                index = self.templateSecCBox.findText(template_data["template_name"])
+                if index >= 0:
+                    self.templateSecCBox.setCurrentIndex(index)
+        else:
+            print("Taslak Düzenleyici iptal edildi.")
 
     def update_connection_status(self):
         """Bağlantı durumunu (ışık), etiketleri ve butonların aktifliğini günceller."""
@@ -134,9 +337,8 @@ class MainWindow(QMainWindow):
         try:
             self.veritabaniLabel.setText(label_text)
         except AttributeError:
-            pass # Label yoksa devam et
+            pass 
         
-        # Excel/PDF butonları SADECE sorgu yapıldıktan sonra (self.df doluysa) açılmalı
         if is_connected and not self.df.empty:
             self.btn_Excel.setEnabled(True)
             self.btn_PDF.setEnabled(True)
@@ -158,7 +360,6 @@ class MainWindow(QMainWindow):
 
         self.show_loading_dialog("Veritabanına bağlanılıyor ve tablolar okunuyor...")
 
-        # Worker'a 'self.db_path' yerine 'self.db_config' sözlüğünü ver
         worker = Worker(get_database_tables, self.db_config) 
         worker.signals.finished.connect(self._on_tables_loaded)
         worker.signals.error.connect(self._on_task_error)
@@ -169,7 +370,6 @@ class MainWindow(QMainWindow):
         """(Callback) Worker'dan gelen tablo listesini alır ve kullanıcıya sunar."""
         self.close_loading_dialog()
 
-        # Gelen sonuç artık (table_list, engine) şeklinde bir tuple
         try:
             table_list, engine = results 
         except Exception as e:
@@ -177,12 +377,11 @@ class MainWindow(QMainWindow):
             self._on_task_error(f"Tablo yükleme sonucu işlenemedi: {results}")
             return
 
-        # Başarılı bağlantıdan gelen 'engine' nesnesini ilerde kullanmak için sakla
         self.db_engine = engine 
 
         if not table_list:
             QMessageBox.warning(self, "Hata", "Veritabanında okunabilir bir tablo bulunamadı.")
-            self.db_config = {} # Bağlantıyı başarısız say
+            self.db_config = {} 
             self.update_connection_status()
             return
 
@@ -195,7 +394,7 @@ class MainWindow(QMainWindow):
             self.target_table = table_name
             print(f"Kullanıcı '{table_name}' tablosunu seçti.")
         else:
-            self.db_config = {} # Bağlantıyı başarısız say
+            self.db_config = {} 
             self.target_table = None
             print("Tablo seçimi iptal edildi.")
 
@@ -217,7 +416,6 @@ class MainWindow(QMainWindow):
             self.progress_dialog.close()
             self.progress_dialog = None
 
-# Bu fonksiyonu güncelleyin
     def sorgulama_yap(self):
         """1. Adım: 'Sorgula' butonu."""
 
@@ -230,25 +428,11 @@ class MainWindow(QMainWindow):
         baslangic = self.date_Baslangic.date().toString("yyyy-MM-dd")
         bitis = self.date_Bitis.date().toString("yyyy-MM-dd")
 
-        # Worker'a, Sınıf değişkenlerindeki (self.) değerlerle başlat
-        # db_path yerine config sözlüğünün tamamını gönder
+
         worker = Worker(run_database_query, self.db_config, self.target_table, baslangic, bitis) 
 
-        worker.signals.finished.connect(self._on_query_finished)
         worker.signals.error.connect(self._on_task_error)
         self.threadpool.start(worker)
-
-    def _on_query_finished(self, df):
-        self.df = df
-        self.tabloyu_doldur(self.df)
-        self.update_connection_status()
-        try:
-            if self.tarihSecCBox.currentData() and self.secili_dosyalar_listesi:
-                dosya_adi = self.secili_dosyalar_listesi[self.secili_dosya_index]
-                self.statusbar.showMessage(f"Gösterilen: {dosya_adi} ({self.secili_dosya_index + 1} / {len(self.secili_dosyalar_listesi)})")
-        except Exception:
-            pass
-        self.close_loading_dialog()
 
     def excel_dosyasini_yukle(self):
         if not self.secili_dosyalar_listesi:
@@ -368,13 +552,12 @@ class MainWindow(QMainWindow):
         self.close_loading_dialog()
         print(f"Ana arayüz: Görev hatası alındı: {hata_mesaji}")
         QMessageBox.critical(self, "Hata", f"İşlem sırasında bir hata oluştu:\n\n{hata_mesaji}")
-
-        # Hata durumunda bağlantıyı sıfırla
-        self.db_config = {} # db_path yerine
+        self.db_config = {} 
         self.target_table = None
         self.db_engine = None
         self.df = pd.DataFrame()
-        self.update_connection_status() # Işığı kırmızıya çeker ve butonları kilitler
+        self.update_connection_status() 
+
     def kayitli_raporlari_tara(self):
             self.tarihSecCBox.blockSignals(True)
             self.tarihSecCBox.clear()
@@ -408,18 +591,15 @@ class MainWindow(QMainWindow):
         """
         print(f"Veritabanı türü '{db_type}' olarak ayarlandı.")
 
-        # Ayarları sıfırla
         self.db_config = {'type': db_type}
         self.target_table = None
         self.df = pd.DataFrame()
         self.tabloyu_doldur(self.df)
 
-        # Durumu güncelle (kırmızı ışık, kilitli butonlar)
         self.update_connection_status()
 
         self.statusbar.showMessage(f"Tür '{db_type}' seçildi. Lütfen 'Veritabanı -> Veritabanını Seç' menüsünden bağlantı kurun.", 5000)
 
-        # Kullanıcıya kolaylık olması için doğrudan bağlantı penceresini de açabiliriz:
         self.open_connection_settings()
 
     def open_connection_settings(self):
@@ -434,20 +614,17 @@ class MainWindow(QMainWindow):
                 "Lütfen önce 'Veritabanı -> Veritabanı Sistemleri' menüsünden bir sistem türü (Access, SQL Server vb.) seçin.")
             return
 
-        # Yeni ConnectionDialog'umuzu oluştur ve türü ona bildir
         dialog = ConnectionDialog(selected_type, self)
 
-        # Diyaloğu aç ve kullanıcının 'OK'e basmasını bekle
         if dialog.exec():
-            # Kullanıcı OK'e bastı
-            self.db_config = dialog.get_config() # Tüm ayarları al (path veya host/user/pass)
+            self.db_config = dialog.get_config() 
             print(f"Bağlantı ayarları alındı: {self.db_config}")
-            self.target_table = None # Yeni DB seçildi, tabloyu sıfırla
+            self.target_table = None 
 
-            # Şimdi bu yeni ayarlarla tablo listesini yüklemeyi dene
+            
             self.load_tables_from_db()
         else:
-            # Kullanıcı İptal'e bastı
+            
             print("Bağlantı ayarları iptal edildi.")
 
 

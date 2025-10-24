@@ -1,0 +1,38 @@
+{
+    "columns": [
+        {
+            "display_name": "Kimlik",
+            "type": "Ham",
+            "source_or_formula": "Kimlik"
+        },
+        {
+            "display_name": "TARIH",
+            "type": "Ham",
+            "source_or_formula": "TARIH"
+        },
+        {
+            "display_name": "H_DEBI1",
+            "type": "Ham",
+            "source_or_formula": "H_DEBI1"
+        },
+        {
+            "display_name": "H_DEBI2",
+            "type": "Ham",
+            "source_or_formula": "H_DEBI2"
+        },
+        {
+            "display_name": "H_DEBI3",
+            "type": "Ham",
+            "source_or_formula": "H_DEBI3"
+        },
+        {
+            "display_name": "toplamdebi",
+            "type": "Hesaplanmış",
+            "source_or_formula": "[H_DEBI1] * 0.6 + [H_DEBI2] * 0.7 + [H_DEBI2] * 0.8"
+        }
+    ],
+    "formulas": {
+        "toplamdebi": "[H_DEBI1] * 0.6 + [H_DEBI2] * 0.7 + [H_DEBI2] * 0.8"
+    },
+    "template_name": "ToplamDebi"
+}
