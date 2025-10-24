@@ -56,6 +56,8 @@ class MainWindow(QMainWindow):
         self.db_engine = None     
         self.target_table = None  
         self.target_date_column = None
+        self.currently_viewing_excel = None
+        self.raw_df_from_excel = None
 
         self.threadpool = QThreadPool()
         print(f"Multithreading için {self.threadpool.maxThreadCount()} adet iş parçacığı mevcut.")
@@ -86,6 +88,7 @@ class MainWindow(QMainWindow):
             self.tarihSecCBox.currentIndexChanged.connect(self.combobox_degisti)
             self.ileriTarihButton.clicked.connect(self.sonraki_rapor)
             self.geriTarihButton.clicked.connect(self.onceki_rapor)
+            self.templateSecCBox.currentIndexChanged.connect(self._apply_template_to_loaded_data)
             self.actionVeritaban_n_Se.triggered.connect(self.open_connection_settings)
 
         except Exception as e:
@@ -117,6 +120,8 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Bağlantı Yok", "Lütfen önce bir veritabanı ve tablo seçin.")
             return
 
+        self.currently_viewing_excel = None
+        self.raw_df_from_excel = None
         selected_template_name = self.templateSecCBox.currentText()
         selected_template_data = self.templateSecCBox.currentData() 
 
@@ -202,7 +207,7 @@ class MainWindow(QMainWindow):
             print(f"Çalışan iş parçacığı: Taslak uygulandı. Sonuç Boyutu: {processed_df.shape}")
 
 
-            print("Çalışan iş parçacığı: İşlem tamamlandı, işlenmiş veri döndürülüyor.")
+            print("Çalışan iş parçacığı: İşlem tamamlandı, işlenmiş veri döndürülüyor.");
             print(f"--- Görev Bitti (İşlenmiş Veri): _task_fetch_and_apply ---\n")
             return processed_df 
 
@@ -272,7 +277,6 @@ class MainWindow(QMainWindow):
         print(f"Çalışan iş parçacığı: Sütunlar bulundu: {column_names}")
         return column_names
 
-
     def _on_columns_loaded_for_editor(self, column_names):
         """(Callback) Veritabanından sütun adları gelince Taslak Editörünü açar."""
         self.close_loading_dialog()
@@ -282,7 +286,6 @@ class MainWindow(QMainWindow):
         else:
             QMessageBox.warning(self, "Sütun Hatası", 
                                  "Seçili tablonun sütun adları okunamadı.")
-
 
     def _show_template_editor_dialog(self, source_columns):
         """TemplateEditorDialog'u verilen kaynak sütunlarla açar ve sonucu işler."""
@@ -300,53 +303,181 @@ class MainWindow(QMainWindow):
         else:
             print("Taslak Düzenleyici iptal edildi.")
 
+    # def update_connection_status(self):
+    #     """Bağlantı durumunu (ışık), etiketleri ve butonların aktifliğini günceller."""
+        
+    #     is_connected = bool(self.db_config and self.target_table)
+        
+    #     label_text = ""
+    #     style = ""
+    #     tooltip = ""
+    #     db_type = self.db_config.get('type', 'Yok')
+        
+    #     if is_connected:
+    #         # 1. Işığı YEŞİL yap (Stil kodu tamamlandı)
+    #         style = "background-color: #4CAF50; border-radius: 6px; min-width: 12px; max-width: 12px; min-height: 12px; max-height: 12px;"
+            
+    #         # Etiket metnini güncelle
+    #         label_text = f"Sistem: {db_type.capitalize()}  |  Tablo: {self.target_table}"
+    #         tooltip = f"BAĞLANDI\nSistem: {db_type}\nTablo: {self.target_table}"
+            
+    #         self.btn_Sorgula.setEnabled(True)
+    #         self.date_Baslangic.setEnabled(True)
+    #         self.date_Bitis.setEnabled(True)
+    #     else:
+    #         # 1. Işığı KIRMIZI yap (Stil kodu tamamlandı)
+    #         style = "background-color: #F44336; border-radius: 6px; min-width: 12px; max-width: 12px; min-height: 12px; max-height: 12px;"
+            
+    #         # Etiket metnini güncelle
+    #         label_text = f"Bağlı Değil. (Seçili Sistem: {db_type.capitalize()})"
+    #         tooltip = "BAĞLI DEĞİL\nLütfen 'Veritabanı' menüsünden bağlantı kurun."
+
+    #         self.btn_Sorgula.setEnabled(False)
+    #         self.date_Baslangic.setEnabled(False)
+    #         self.date_Bitis.setEnabled(False)
+    #         self.btn_Excel.setEnabled(False)
+    #         self.btn_PDF.setEnabled(False)
+        
+    #     # Işığı ve etiketi ayarla
+    #     self.status_light.setStyleSheet(style)
+    #     self.status_light.setToolTip(tooltip)
+        
+    #     try:
+    #         self.veritabaniLabel.setText(label_text)
+    #     except AttributeError:
+    #         pass 
+        
+    #     if is_connected and not self.df.empty:
+    #         self.btn_Excel.setEnabled(True)
+    #         self.btn_PDF.setEnabled(True)
+
     def update_connection_status(self):
         """Bağlantı durumunu (ışık), etiketleri ve butonların aktifliğini günceller."""
-        
-        is_connected = bool(self.db_config and self.target_table)
-        
-        label_text = ""
+
+        is_connected = bool(self.db_config and self.target_table and self.target_date_column) # Artık tarih sütunu da şart
+
+        label_parts = [] # Etiket metnini oluşturacak parçalar
         style = ""
         tooltip = ""
         db_type = self.db_config.get('type', 'Yok')
-        
+
         if is_connected:
-            # 1. Işığı YEŞİL yap (Stil kodu tamamlandı)
             style = "background-color: #4CAF50; border-radius: 6px; min-width: 12px; max-width: 12px; min-height: 12px; max-height: 12px;"
-            
-            # Etiket metnini güncelle
-            label_text = f"Sistem: {db_type.capitalize()}  |  Tablo: {self.target_table}"
-            tooltip = f"BAĞLANDI\nSistem: {db_type}\nTablo: {self.target_table}"
-            
-            self.btn_Sorgula.setEnabled(True)
+            tooltip_parts = ["BAĞLANDI"]
+
+            # Sistem Türü
+            label_parts.append(f"Sistem: {db_type.capitalize()}")
+            tooltip_parts.append(f"Sistem: {db_type}")
+
+            # Veritabanı Adı/Yolu
+            if db_type == 'access':
+                db_name = os.path.basename(self.db_config.get('path', 'Bilinmiyor'))
+                label_parts.append(f"Dosya: {db_name}")
+                tooltip_parts.append(f"Dosya: {self.db_config.get('path', 'Bilinmiyor')}")
+            else:
+                db_name = self.db_config.get('database', 'Bilinmiyor')
+                host_name = self.db_config.get('host', 'Bilinmiyor')
+                label_parts.append(f"DB: {db_name} ({host_name})")
+                tooltip_parts.append(f"Veritabanı: {db_name} (Sunucu: {host_name})")
+
+            # Tablo Adı
+            label_parts.append(f"Tablo: {self.target_table}")
+            tooltip_parts.append(f"Tablo: {self.target_table}")
+            # Tarih Sütunu
+            label_parts.append(f"Tarih Sütunu: {self.target_date_column}")
+            tooltip_parts.append(f"Tarih Sütunu: {self.target_date_column}")
+
+            # Butonları aç
+            self.btn_Sorgula.setEnabled(True) # 'Rapor Al' butonu yerine yeni butonu açalım
+            self.btn_ApplyTemplate.setEnabled(True) # 'Taslağı Uygula' butonu
             self.date_Baslangic.setEnabled(True)
             self.date_Bitis.setEnabled(True)
         else:
-            # 1. Işığı KIRMIZI yap (Stil kodu tamamlandı)
             style = "background-color: #F44336; border-radius: 6px; min-width: 12px; max-width: 12px; min-height: 12px; max-height: 12px;"
-            
-            # Etiket metnini güncelle
-            label_text = f"Bağlı Değil. (Seçili Sistem: {db_type.capitalize()})"
-            tooltip = "BAĞLI DEĞİL\nLütfen 'Veritabanı' menüsünden bağlantı kurun."
+            label_parts.append(f"Bağlı Değil. (Seçili Sistem: {db_type.capitalize()})")
+            tooltip_parts = ["BAĞLI DEĞİL", "Lütfen 'Veritabanı' menüsünden bağlantı kurun."]
 
-            self.btn_Sorgula.setEnabled(False)
+            # Butonları kilitle
+            self.btn_Sorgula.setEnabled(False) 
+            self.btn_ApplyTemplate.setEnabled(False) 
             self.date_Baslangic.setEnabled(False)
             self.date_Bitis.setEnabled(False)
             self.btn_Excel.setEnabled(False)
             self.btn_PDF.setEnabled(False)
-        
-        # Işığı ve etiketi ayarla
+
+        # Eğer bir Excel dosyasına bakılıyorsa, onu da ekle
+        if self.currently_viewing_excel:
+            label_parts.append(f"Görüntülenen Excel: {self.currently_viewing_excel}")
+            tooltip_parts.append(f"Görüntülenen Excel: {self.currently_viewing_excel}")
+
+        # Etiket metnini birleştir
+        label_text = "  |  ".join(label_parts)
+        tooltip = "\n".join(tooltip_parts)
+
+        # Işığı, etiketi ve tooltip'i ayarla
         self.status_light.setStyleSheet(style)
         self.status_light.setToolTip(tooltip)
-        
+
         try:
             self.veritabaniLabel.setText(label_text)
+            self.veritabaniLabel.setToolTip(tooltip) # Etikete de tooltip ekleyelim
         except AttributeError:
             pass 
-        
-        if is_connected and not self.df.empty:
+
+        # Excel/PDF butonları SADECE DataFrame doluysa açılmalı
+        # (Bu kontrol bağlantıdan bağımsız, en sonda yapılmalı)
+        if not self.df.empty:
             self.btn_Excel.setEnabled(True)
             self.btn_PDF.setEnabled(True)
+        else:
+            self.btn_Excel.setEnabled(False)
+            self.btn_PDF.setEnabled(False)
+
+    def _apply_template_to_loaded_data(self):
+        """
+        Mevcut self.raw_df_from_excel'e templateSecCBox'ta seçili olan taslağı uygular
+        ve sonucu self.df'e atayıp tabloyu günceller.
+        """
+        if self.raw_df_from_excel is None or self.raw_df_from_excel.empty:
+            print("_apply_template_to_loaded_data: Uygulanacak ham Excel verisi yok.")
+            return # Uygulanacak veri yoksa çık
+
+        selected_template_name = self.templateSecCBox.currentText()
+        selected_template_data = self.templateSecCBox.currentData() # userData
+        is_raw_data_selected = (selected_template_data is None)
+
+        processed_df = None # Sonuç DataFrame'i
+
+        if is_raw_data_selected:
+            # Ham veri seçiliyse, kopyasını kullan
+            print("Ham veri taslağı seçili, orijinal Excel verisi kullanılıyor.")
+            processed_df = self.raw_df_from_excel.copy()
+        elif selected_template_name:
+            # Başka bir taslak seçiliyse
+            print(f"'{selected_template_name}' taslağı mevcut Excel verisine uygulanıyor...")
+            try:
+                template_data = load_template(template_name=selected_template_name, parent_widget=self)
+                if template_data:
+                    # data_processor'daki fonksiyonu HAM EXCEL VERİSİNE uygula
+                    processed_df = apply_template(self.raw_df_from_excel, template_data) 
+                else:
+                    QMessageBox.warning(self, "Taslak Hatası", 
+                                        f"'{selected_template_name}' taslağı yüklenemedi. Ham Excel verisi gösteriliyor.")
+                    processed_df = self.raw_df_from_excel.copy() # Hata durumunda ham veriyi göster
+            except Exception as e:
+                QMessageBox.critical(self, "Taslak Uygulama Hatası", 
+                                    f"Taslak uygulanırken bir hata oluştu:\n{e}")
+                processed_df = self.raw_df_from_excel.copy() # Hata durumunda ham veriyi göster
+        else:
+            # Geçersiz durum (ComboBox boş olmamalı)
+            processed_df = self.raw_df_from_excel.copy()
+
+
+        # Sonucu self.df'e ata ve tabloyu doldur
+        self.df = processed_df
+        print("Tablo yeni işlenmiş veriyle dolduruluyor...")
+        self.tabloyu_doldur(self.df)
+        self.update_connection_status() # Excel/PDF butonlarını ayarla
 
     def select_database_file(self):
         file_path, _ = QFileDialog.getOpenFileName(
@@ -371,40 +502,7 @@ class MainWindow(QMainWindow):
         self.threadpool.start(worker)
 
 
-    # def _on_tables_loaded(self, results):
-    #     """(Callback) Worker'dan gelen tablo listesini alır ve kullanıcıya sunar."""
-    #     self.close_loading_dialog()
-
-    #     try:
-    #         table_list, engine = results 
-    #     except Exception as e:
-    #         print(f"Tablo yükleme sonucu işlenemedi: {e}")
-    #         self._on_task_error(f"Tablo yükleme sonucu işlenemedi: {results}")
-    #         return
-
-    #     self.db_engine = engine 
-
-    #     if not table_list:
-    #         QMessageBox.warning(self, "Hata", "Veritabanında okunabilir bir tablo bulunamadı.")
-    #         self.db_config = {} 
-    #         self.update_connection_status()
-    #         return
-
-    #     table_name, ok = QInputDialog.getItem(
-    #         self, "Tablo Seç", "Lütfen sorgulanacak tabloyu seçin:",
-    #         table_list, 0, False
-    #     )
-
-    #     if ok and table_name:
-    #         self.target_table = table_name
-    #         print(f"Kullanıcı '{table_name}' tablosunu seçti.")
-    #     else:
-    #         self.db_config = {} 
-    #         self.target_table = None
-    #         print("Tablo seçimi iptal edildi.")
-
-    #     self.update_connection_status()
-        
+           
     def _on_tables_loaded(self, results):
         """(Callback) Worker'dan gelen tablo listesini alır, tabloyu seçtirir,
         sonra sütunları çeker ve tarih sütununu seçtirir."""
@@ -508,38 +606,83 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Hata", "Lütfen önce 'Veritabanı' menüsünden bir veritabanı ve tablo seçin.")
             return
 
+        if not self.target_date_column:
+            QMessageBox.warning(self, "Hata", "Tarih sütunu seçilmemiş. Lütfen veritabanı bağlantısını yeniden yapın.")
+            return
+
         self.show_loading_dialog("Veritabanı sorgulanıyor... Lütfen bekleyin.")
 
         baslangic = self.date_Baslangic.date().toString("yyyy-MM-dd")
         bitis = self.date_Bitis.date().toString("yyyy-MM-dd")
 
+        # date_column_name parametresini ekleyerek çağır
+        worker = Worker(run_database_query, 
+                      self.db_config, 
+                      self.target_table, 
+                      baslangic, 
+                      bitis,
+                      self.target_date_column)  # Tarih sütunu parametresi eklendi
 
-        worker = Worker(run_database_query, self.db_config, self.target_table, baslangic, bitis) 
-
+        worker.signals.finished.connect(self._on_query_finished)  # _on_query_finished bağlantısı eklendi
         worker.signals.error.connect(self._on_task_error)
         self.threadpool.start(worker)
 
     def excel_dosyasini_yukle(self):
-        """Excel okumak için bir worker BAŞLATIR."""
-        
+        """Excel okumak için bir worker BAŞLATIR, ham veriyi saklar ve seçili taslağı uygular."""
+
         if not self.secili_dosyalar_listesi: return
-            
+
         try:
             klasor_yolu = self.tarihSecCBox.currentData()
             dosya_adi = self.secili_dosyalar_listesi[self.secili_dosya_index]
             tam_yol = os.path.join(klasor_yolu, dosya_adi)
-            
-            self.show_loading_dialog(f"{dosya_adi} yükleniyor... Lütfen bekleyin.")
-            
-            worker = Worker(load_excel_file, tam_yol)
 
-            worker.signals.finished.connect(self._on_template_applied) 
+            # Görüntülenen Excel adını sakla
+            self.currently_viewing_excel = dosya_adi 
 
+            self.show_loading_dialog(f"{dosya_adi} (Ham Veri) yükleniyor...")
+
+            # Worker'a sadece Excel okuma görevini ver
+            worker = Worker(load_excel_file, tam_yol) 
+            # İş bitince _on_excel_loaded fonksiyonu çalışsın (YENİ CALLBACK)
+            worker.signals.finished.connect(self._on_excel_loaded) 
             worker.signals.error.connect(self._on_task_error)
             self.threadpool.start(worker)
-        
+
+            # Durum Çubuğunu Güncelle
+            status_text = f"Yükleniyor: {dosya_adi} ({self.secili_dosya_index + 1} / {len(self.secili_dosyalar_listesi)})"
+            self.statusbar.showMessage(status_text)
+            self.update_connection_status() # Ana etiketi de güncelle
+
         except Exception as e:
             self._on_task_error(f"Excel yükleme başlatılamadı: {e}")
+            self.currently_viewing_excel = None 
+            self.raw_df_from_excel = None # Hata olursa sıfırla
+            self.statusbar.clearMessage()
+
+    def _on_excel_loaded(self, loaded_raw_df):
+        """(Callback) Excel'den ham veri gelince çalışır, ham veriyi saklar ve seçili taslağı uygular."""
+        self.close_loading_dialog() # Yükleme penceresini kapat
+
+        if loaded_raw_df is None or loaded_raw_df.empty:
+            QMessageBox.warning(self, "Excel Boş", "Yüklenen Excel dosyasında veri bulunamadı.")
+            self.raw_df_from_excel = None
+            self.df = pd.DataFrame()
+            self.tabloyu_doldur(self.df)
+            self.update_connection_status()
+            self.statusbar.clearMessage()
+            return
+
+        # 1. Ham veriyi sakla
+        self.raw_df_from_excel = loaded_raw_df.copy()
+        print("Excel'den ham veri saklandı.")
+
+        # 2. O an seçili olan taslağı uygula (veya ham veriyi göster)
+        self._apply_template_to_loaded_data()
+
+        # 3. Durum çubuğunu son haliyle güncelle
+        status_text = f"Gösterilen: {self.currently_viewing_excel} ({self.secili_dosya_index + 1} / {len(self.secili_dosyalar_listesi)})"
+        self.statusbar.showMessage(status_text)
 
     def combobox_degisti(self, index):
         klasor_yolu = self.tarihSecCBox.currentData()
@@ -606,17 +749,30 @@ class MainWindow(QMainWindow):
         if self.df.empty:
             QMessageBox.warning(self, "Uyarı", "Dışa aktarılacak veri bulunamadı.")
             return
+        
         start_date = self.date_Baslangic.date().toPyDate()
         end_date = self.date_Bitis.date().toPyDate()
-        kayit_yolu = get_yeni_kayit_yolu("excel", start_date, end_date, self.target_table)
-        if not kayit_yolu:
+        
+        # Seçili taslak adını al
+        current_template = self.templateSecCBox.currentText()
+        if current_template == "Taslak Uygulama (Varsayılan: Ham Veri)":
+            current_template = None
+
+        # Sadece bir kez get_yeni_kayit_yolu çağrılıyor, excel formatı ile
+        kayit_yolu = get_yeni_kayit_yolu("excel", start_date, end_date, self.target_table, current_template)
+
+        if not kayit_yolu: 
             QMessageBox.critical(self, "Hata", "Kayıt yolu oluşturulamadı.")
             return
+
         self.show_loading_dialog("Excel dosyası oluşturuluyor... Lütfen bekleyin.")
+        
+        # Mevcut DataFrame'i (self.df) kullan - bu zaten işlenmiş/dönüştürülmüş veri
         worker = Worker(task_run_excel, kayit_yolu, self.df.copy())
         worker.signals.finished.connect(self._on_export_finished)
         worker.signals.error.connect(self._on_task_error)
         self.threadpool.start(worker)
+        
 
     def export_pdf(self):
         if self.df.empty:
@@ -647,6 +803,8 @@ class MainWindow(QMainWindow):
         self.db_config = {} 
         self.target_table = None
         self.target_date_column = None 
+        self.currently_viewing_excel = None
+        self.raw_df_from_excel = None
         self.db_engine = None
         self.df = pd.DataFrame()
         self.update_connection_status() 
@@ -687,6 +845,8 @@ class MainWindow(QMainWindow):
         self.db_config = {'type': db_type}
         self.target_table = None
         self.target_date_column = None
+        self.raw_df_from_excel = None
+        self.currently_viewing_excel = None
         self.df = pd.DataFrame()
         self.tabloyu_doldur(self.df)
 
@@ -722,13 +882,6 @@ class MainWindow(QMainWindow):
             self.db_config = {} 
             self.target_table = None
             self.target_date_column = None
+            self.raw_df_from_excel = None
+            self.currently_viewing_excel = None
             self.update_connection_status() 
-
-
-# --- Ana Uygulama Başlangıcı ---
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    register_pdf_fonts()
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec())

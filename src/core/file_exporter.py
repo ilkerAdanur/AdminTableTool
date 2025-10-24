@@ -9,10 +9,9 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
 from reportlab.lib.pagesizes import landscape, A4
 from reportlab.lib import colors
 
-def get_yeni_kayit_yolu(format, start_date_obj, end_date_obj, target_table):
+def get_yeni_kayit_yolu(format, start_date_obj, end_date_obj, target_table, template_name=None):
     """
-    Dinamik kayıt yolu ve 'TABLO(BAŞLANGIÇ-BİTİŞ)' formatında dosya adı oluşturur.
-    Bu fonksiyon artık 'self' kullanmaz, ihtiyaç duyduğu her şeyi parametre olarak alır.
+    Dinamik kayıt yolu ve 'TABLO(BAŞLANGIÇ-BİTİŞ)[-TASLAK_ADI]' formatında dosya adı oluşturur.
     """
     try:
         base_folder = r"C:\rapor" 
@@ -25,10 +24,17 @@ def get_yeni_kayit_yolu(format, start_date_obj, end_date_obj, target_table):
         # Klasör yolu için tarihleri al (YIL\GUN_AY)
         yil = start_date_obj.strftime("%Y")
         gun_ay = start_date_obj.strftime("%d_%m")
-
+        
         table_name = target_table if target_table else "Rapor"
 
         base_filename = f"{table_name}({start_str}-{end_str})"
+
+        # Eğer bir taslak adı verilmişse ve bu ilk seçenek değilse ("Ham Veri")
+        if template_name and template_name != "Taslak Uygulama (Varsayılan: Ham Veri)":
+             # Taslak adından dosya adı için güvenli bir versiyon oluştur
+             safe_template_name = "".join(c for c in template_name if c.isalnum() or c in ('_', '-')).rstrip()
+             if safe_template_name:
+                  base_filename += f"-{safe_template_name}" # Örn: DEBILER(....)-ToplamDebi
 
         tam_klasor_yolu = os.path.join(format_folder, yil, gun_ay)
         os.makedirs(tam_klasor_yolu, exist_ok=True)
