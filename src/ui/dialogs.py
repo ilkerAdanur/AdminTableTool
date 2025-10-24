@@ -89,26 +89,27 @@ class ConnectionDialog(QDialog):
     def accept(self):
         """Kullanıcı 'OK'e bastığında ayarları 'self.config' sözlüğüne kaydet."""
         if self.db_type == "access":
-            if not self.path_edit.text():
-                # Hata yönetimi eklenebilir
+            file_path = self.path_edit.text().strip()
+            if not file_path:
                 QMessageBox.warning(self,"Eksik Bilgi", "Lütfen bir Access dosyası seçin.")
                 return 
-            self.config['path'] = self.path_edit.text()
-        else:
-            # Diğer DB türleri için temel kontroller (boş olmamalı)
-            required_fields = ['host', 'database', 'user'] # Port ve şifre boş olabilir
-            missing = [f for f in required_fields if not self.config.get(f)]
+            self.config['path'] = file_path
+        
+        else: 
+            self.config['host'] = self.host_edit.text().strip()
+            self.config['port'] = self.port_edit.text().strip()
+            self.config['database'] = self.db_name_edit.text().strip()
+            self.config['user'] = self.user_edit.text().strip()
+            self.config['password'] = self.pass_edit.text() 
+
+            required_fields = ['host', 'database'] 
+            
+            missing = [f for f in required_fields if not self.config.get(f)] 
             if missing:
                  QMessageBox.warning(self,"Eksik Bilgi", f"Lütfen şu alanları doldurun: {', '.join(missing)}")
-                 return 
+                 return             
+        super().accept()
 
-            self.config['host'] = self.host_edit.text()
-            self.config['port'] = self.port_edit.text()
-            self.config['database'] = self.db_name_edit.text()
-            self.config['user'] = self.user_edit.text()
-            self.config['password'] = self.pass_edit.text()
-        
-        super().accept() 
 
     def get_config(self):
         """Ana pencerenin bağlantı ayarlarını alması için kullanılır."""
@@ -239,9 +240,7 @@ class TemplateEditorDialog(QDialog):
 
         self._editing_formula_row = -1 
 
-
     # --- Buton Fonksiyonları ---
-
     def _add_column_to_report(self):
         """Seçili kaynak sütunları rapor tablosuna 'Ham' olarak ekler."""
         selected_items = self.source_columns_list.selectedItems()
@@ -318,7 +317,6 @@ class TemplateEditorDialog(QDialog):
         self.formula_edit.clear()
         self.formula_group.setTitle("Formül Düzenleyici (Yeni Hesaplama Ekle)")
 
-
     def _add_or_update_calculation(self):
         """Formül düzenleyicideki bilgileri rapor tablosuna ekler veya günceller."""
         new_name = self.new_column_name_edit.text().strip()
@@ -345,8 +343,6 @@ class TemplateEditorDialog(QDialog):
         self.formula_edit.clear()
         self._editing_formula_row = -1
 
-
-
     def _save_template(self):
         """'Kaydet' butonuna basıldığında çalışır."""
         template_name = self.template_name_edit.text().strip()
@@ -371,8 +367,6 @@ class TemplateEditorDialog(QDialog):
             loaded_name = template_data.get("_template_name", "")
             self.template_name_edit.setText(loaded_name)
             QMessageBox.information(self, "Başarılı", f"'{loaded_name}' taslağı yüklendi.")
-
-
 
     def _collect_template_data(self):
         """Arayüzdeki (Rapor Sütunları tablosu) veriyi bir sözlük olarak toplar."""

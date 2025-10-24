@@ -8,6 +8,7 @@ import functools
 from src.core.database import get_database_tables # Bunu zaten import ediyor olmalısınız
 
 from src.ui.dialogs import TemplateEditorDialog
+# from src.core.database import date_column_name
 
 from PyQt6.QtCore import QThreadPool, Qt
 from PyQt6.QtWidgets import (
@@ -50,12 +51,11 @@ class MainWindow(QMainWindow):
         self.secili_dosyalar_listesi = []
         self.secili_dosya_index = 0
 
-        self.db_path = None
-        self.target_table = None
 
         self.db_config = {}       
         self.db_engine = None     
         self.target_table = None  
+        self.target_date_column = None
 
         self.threadpool = QThreadPool()
         print(f"Multithreading için {self.threadpool.maxThreadCount()} adet iş parçacığı mevcut.")
@@ -126,6 +126,10 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Taslak Seçilmedi", "Lütfen 'Rapor Taslağı' listesinden bir taslak seçin.")
             return
 
+        if not self.target_date_column: # <-- YENİ KONTROL
+            QMessageBox.warning(self, "Tarih Sütunu Seçilmedi","Lütfen önce 'Veritabanı' menüsünden bağlantı kurup bir tarih sütunu seçin.")
+            return
+
         baslangic = self.date_Baslangic.date().toString("yyyy-MM-dd")
         bitis = self.date_Bitis.date().toString("yyyy-MM-dd")
 
@@ -135,16 +139,16 @@ class MainWindow(QMainWindow):
             self.show_loading_dialog(f"'{selected_template_name}' taslağı uygulanıyor...")
 
         worker = Worker(self._task_fetch_and_apply, 
-                        self.db_config, 
-                        self.target_table, 
-                        baslangic, 
-                        bitis, 
-                        None if is_raw_data_selected else selected_template_name) 
+                    self.db_config, 
+                    self.target_table, 
+                    baslangic, 
+                    bitis, 
+                    None if is_raw_data_selected else selected_template_name,
+                    self.target_date_column) # <-- SEÇİLEN TARİH SÜTUNUNU GÖNDER
 
         worker.signals.finished.connect(self._on_template_applied) 
         worker.signals.error.connect(self._on_task_error)
         self.threadpool.start(worker)
-
 
     def _on_template_applied(self, processed_df):
         """(Callback) Worker'dan gelen SONUCU (işlenmiş veya ham) tabloya yükler."""
@@ -160,7 +164,7 @@ class MainWindow(QMainWindow):
         self.close_loading_dialog() 
         print(f"Ana arayüz: İşlem tamamlandı ve sonuç tabloya yüklendi.")
 
-    def _task_fetch_and_apply(self, config, target_table, start_date, end_date, template_name):
+    def _task_fetch_and_apply(self, config, target_table, start_date, end_date, template_name,date_column_name):
         """(Worker) Ham veriyi çeker, taslağı yükler ve uygular. (Hata ayıklama print'leri eklendi)"""
         
         print(f"\n--- Görev Başladı: _task_fetch_and_apply ---")
@@ -170,10 +174,11 @@ class MainWindow(QMainWindow):
         print(f"  start_date: {start_date}")
         print(f"  end_date: {end_date}")
         print(f"  template_name: {template_name}")
+        print(f"  date_column_name: {date_column_name}")
         
         try:
             print("Çalışan iş parçacığı: Ham veri çekiliyor...")
-            raw_df = run_database_query(config, target_table, start_date, end_date)
+            raw_df = run_database_query(config, target_table, start_date, end_date, date_column_name) # <-- EKLENDİ
             print(f"Çalışan iş parçacığı: Ham veri çekildi. Boyut: {raw_df.shape}")
 
             if not template_name:
@@ -366,15 +371,49 @@ class MainWindow(QMainWindow):
         self.threadpool.start(worker)
 
 
+    # def _on_tables_loaded(self, results):
+    #     """(Callback) Worker'dan gelen tablo listesini alır ve kullanıcıya sunar."""
+    #     self.close_loading_dialog()
+
+    #     try:
+    #         table_list, engine = results 
+    #     except Exception as e:
+    #         print(f"Tablo yükleme sonucu işlenemedi: {e}")
+    #         self._on_task_error(f"Tablo yükleme sonucu işlenemedi: {results}")
+    #         return
+
+    #     self.db_engine = engine 
+
+    #     if not table_list:
+    #         QMessageBox.warning(self, "Hata", "Veritabanında okunabilir bir tablo bulunamadı.")
+    #         self.db_config = {} 
+    #         self.update_connection_status()
+    #         return
+
+    #     table_name, ok = QInputDialog.getItem(
+    #         self, "Tablo Seç", "Lütfen sorgulanacak tabloyu seçin:",
+    #         table_list, 0, False
+    #     )
+
+    #     if ok and table_name:
+    #         self.target_table = table_name
+    #         print(f"Kullanıcı '{table_name}' tablosunu seçti.")
+    #     else:
+    #         self.db_config = {} 
+    #         self.target_table = None
+    #         print("Tablo seçimi iptal edildi.")
+
+    #     self.update_connection_status()
+        
     def _on_tables_loaded(self, results):
-        """(Callback) Worker'dan gelen tablo listesini alır ve kullanıcıya sunar."""
-        self.close_loading_dialog()
+        """(Callback) Worker'dan gelen tablo listesini alır, tabloyu seçtirir,
+        sonra sütunları çeker ve tarih sütununu seçtirir."""
+        self.close_loading_dialog() # İlk bekleme penceresini kapat
 
         try:
             table_list, engine = results 
         except Exception as e:
-            print(f"Tablo yükleme sonucu işlenemedi: {e}")
-            self._on_task_error(f"Tablo yükleme sonucu işlenemedi: {results}")
+            self._on_task_error(f"Tablo yükleme sonucu işlenemedi: {results} - Hata: {e}")
             return
 
         self.db_engine = engine 
@@ -385,6 +424,7 @@ class MainWindow(QMainWindow):
             self.update_connection_status()
             return
 
+        # 1. Adım: Tabloyu Seçtir
         table_name, ok = QInputDialog.getItem(
             self, "Tablo Seç", "Lütfen sorgulanacak tabloyu seçin:",
             table_list, 0, False
@@ -392,12 +432,57 @@ class MainWindow(QMainWindow):
 
         if ok and table_name:
             self.target_table = table_name
-            print(f"Kullanıcı '{table_name}' tablosunu seçti.")
-        else:
+            print(f"Kullanıcı '{table_name}' tablosunu seçti. Şimdi sütunlar çekilecek...")
+
+            # 2. Adım: Seçilen Tablonun Sütunlarını Çekmek İçin Yeni Worker Başlat
+            self.show_loading_dialog(f"'{table_name}' tablosunun sütunları okunuyor...")
+            # (_task_get_column_names daha önce Template Editor için eklenmişti)
+            worker = Worker(self._task_get_column_names, self.db_config, self.target_table)
+            worker.signals.finished.connect(self._on_columns_loaded_for_date_selection) # YENİ Callback
+            worker.signals.error.connect(self._on_task_error)
+            self.threadpool.start(worker)
+
+        else: # Kullanıcı tablo seçimini iptal etti
             self.db_config = {} 
             self.target_table = None
+            self.target_date_column = None # Sıfırla
             print("Tablo seçimi iptal edildi.")
+            self.update_connection_status()
 
+    def _on_columns_loaded_for_date_selection(self, column_names):
+        """(Callback) Sütun adları geldikten sonra kullanıcıya tarih sütununu seçtirir."""
+        self.close_loading_dialog() # Sütun okuma bekleme penceresini kapat
+
+        if not column_names:
+            QMessageBox.warning(self, "Sütun Hatası", 
+                                f"'{self.target_table}' tablosunun sütunları okunamadı.")
+            self.db_config = {} # Bağlantıyı başarısız say
+            self.target_table = None
+            self.target_date_column = None
+            self.update_connection_status()
+            return
+
+        # 3. Adım: Tarih Sütununu Seçtir
+        date_col, ok = QInputDialog.getItem(
+            self,
+            "Tarih Sütununu Seç",
+            "Lütfen tarih filtrelemesi için kullanılacak sütunu seçin:",
+            column_names, # Seçenekler
+            0,            # Varsayılan (ilk sütun)
+            False         # Düzenlenemez
+        )
+
+        if ok and date_col:
+            self.target_date_column = date_col
+            print(f"Kullanıcı tarih sütunu olarak '{date_col}' seçti.")
+        else:
+            # Kullanıcı tarih sütunu seçimini iptal etti
+            self.db_config = {} # Bağlantıyı başarısız say
+            self.target_table = None
+            self.target_date_column = None
+            print("Tarih sütunu seçimi iptal edildi.")
+
+        # SON Adım: Bağlantı durumunu güncelle (Işık yeşile dönmeli)
         self.update_connection_status()
         
     def show_loading_dialog(self, text):
@@ -435,17 +520,24 @@ class MainWindow(QMainWindow):
         self.threadpool.start(worker)
 
     def excel_dosyasini_yukle(self):
-        if not self.secili_dosyalar_listesi:
-            return
+        """Excel okumak için bir worker BAŞLATIR."""
+        
+        if not self.secili_dosyalar_listesi: return
+            
         try:
             klasor_yolu = self.tarihSecCBox.currentData()
             dosya_adi = self.secili_dosyalar_listesi[self.secili_dosya_index]
             tam_yol = os.path.join(klasor_yolu, dosya_adi)
+            
             self.show_loading_dialog(f"{dosya_adi} yükleniyor... Lütfen bekleyin.")
+            
             worker = Worker(load_excel_file, tam_yol)
-            worker.signals.finished.connect(self._on_query_finished)
+
+            worker.signals.finished.connect(self._on_template_applied) 
+
             worker.signals.error.connect(self._on_task_error)
             self.threadpool.start(worker)
+        
         except Exception as e:
             self._on_task_error(f"Excel yükleme başlatılamadı: {e}")
 
@@ -554,6 +646,7 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, "Hata", f"İşlem sırasında bir hata oluştu:\n\n{hata_mesaji}")
         self.db_config = {} 
         self.target_table = None
+        self.target_date_column = None 
         self.db_engine = None
         self.df = pd.DataFrame()
         self.update_connection_status() 
@@ -593,6 +686,7 @@ class MainWindow(QMainWindow):
 
         self.db_config = {'type': db_type}
         self.target_table = None
+        self.target_date_column = None
         self.df = pd.DataFrame()
         self.tabloyu_doldur(self.df)
 
@@ -624,8 +718,11 @@ class MainWindow(QMainWindow):
             
             self.load_tables_from_db()
         else:
-            
             print("Bağlantı ayarları iptal edildi.")
+            self.db_config = {} 
+            self.target_table = None
+            self.target_date_column = None
+            self.update_connection_status() 
 
 
 # --- Ana Uygulama Başlangıcı ---
