@@ -62,6 +62,9 @@
       </item>
       <item>
        <widget class="QDateEdit" name="date_Baslangic">
+        <property name="calendarPopup">
+         <bool>true</bool>
+        </property>
         <property name="dateTime">
          <datetime>
           <hour>0</hour>
@@ -71,9 +74,6 @@
           <month>1</month>
           <day>1</day>
          </datetime>
-        </property>
-        <property name="calendarPopup">
-         <bool>true</bool>
         </property>
        </widget>
       </item>
@@ -86,6 +86,9 @@
       </item>
       <item>
        <widget class="QDateEdit" name="date_Bitis">
+        <property name="calendarPopup">
+         <bool>true</bool>
+        </property>
         <property name="dateTime">
          <datetime>
           <hour>0</hour>
@@ -95,9 +98,6 @@
           <month>1</month>
           <day>31</day>
          </datetime>
-        </property>
-        <property name="calendarPopup">
-         <bool>true</bool>
         </property>
        </widget>
       </item>
@@ -119,9 +119,9 @@
     <item>
      <layout class="QHBoxLayout" name="horizontalLayout_Buttons">
       <item>
-       <widget class="QPushButton" name="btn_Sorgula">
+       <widget class="QPushButton" name="btn_ApplyTemplate">
         <property name="text">
-         <string>Rapor Al</string>
+         <string>Taslağı Uygula</string>
         </property>
        </widget>
       </item>
@@ -176,13 +176,6 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="btn_ApplyTemplate">
-        <property name="text">
-         <string>Taslağı Göster</string>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="QComboBox" name="tarihSecCBox">
         <property name="toolTip">
          <string>Kaydedilmiş Excel raporlarına göz atın</string>
@@ -191,21 +184,21 @@
       </item>
       <item>
        <widget class="QPushButton" name="geriTarihButton">
-        <property name="toolTip">
-         <string>Seçili tarihteki önceki Excel raporunu göster</string>
-        </property>
         <property name="text">
          <string>&lt; Önceki</string>
+        </property>
+        <property name="toolTip">
+         <string>Seçili tarihteki önceki Excel raporunu göster</string>
         </property>
        </widget>
       </item>
       <item>
        <widget class="QPushButton" name="ileriTarihButton">
-        <property name="toolTip">
-         <string>Seçili tarihteki sonraki Excel raporunu göster</string>
-        </property>
         <property name="text">
          <string>Sonraki &gt;</string>
+        </property>
+        <property name="toolTip">
+         <string>Seçili tarihteki sonraki Excel raporunu göster</string>
         </property>
        </widget>
       </item>
@@ -269,6 +262,12 @@
     <addaction name="menuVeritaban_T_r_Se_iniz"/>
     <addaction name="actionVeritaban_n_Se"/>
    </widget>
+   <widget class="QMenu" name="menuAraclar">
+    <property name="title">
+     <string>Araçlar</string>
+    </property>
+    <addaction name="actionGunluk_Ozet_Raporu"/>
+   </widget>
    <widget class="QMenu" name="menuProfil">
     <property name="title">
      <string>Profil</string>
@@ -278,7 +277,7 @@
    <addaction name="menuAna_Sayfa"/>
    <addaction name="menuAyarlar"/>
    <addaction name="menuVeritaban"/>
-   <addaction name="menuProfil"/>
+   <addaction name="menuAraclar"/> <addaction name="menuProfil"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <action name="actionVeritaban_n_Se">
@@ -326,7 +325,12 @@
     <string>Rapor Taslaklarını Yönet...</string>
    </property>
   </action>
- </widget>
+  <action name="actionGunluk_Ozet_Raporu">
+   <property name="text">
+    <string>Günlük Özet Raporu...</string>
+   </property>
+  </action>
+  </widget>
  <resources/>
  <connections/>
 </ui>

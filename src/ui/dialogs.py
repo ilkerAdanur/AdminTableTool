@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QGroupBox, QListWidget, QTableWidget, QAbstractItemView,
     QTableWidgetItem, QTextEdit, QSizePolicy, QSpacerItem,QMessageBox 
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt,QDate
 
 from src.core.template_manager import save_template, load_template, get_available_templates
 
@@ -447,3 +447,5 @@ class TemplateEditorDialog(QDialog):
     def get_template_data(self):
         """'accept' içinde toplanan veriyi döndürür."""
         return getattr(self, "template_data", None)
+
+

@@ -107,3 +107,90 @@ def apply_template(raw_df: pd.DataFrame, template_data: dict):
 
     print("Taslak başarıyla uygulandı.")
     return final_df
+
+def process_daily_summary(raw_df: pd.DataFrame, settings: dict):
+    """
+    Ham DataFrame'i alır ve ayarlara göre günlük olarak özetler.
+    TARIH ve SAAT sütunlarını GÜVENLİ bir şekilde birleştirmeyi dener.
+    """
+    
+    date_col = settings["date_col"]
+    data_col = settings["data_col"]
+    agg_type_str = settings["agg_type"]
+    
+    if raw_df.empty:
+        return pd.DataFrame()
+        
+    df = raw_df.copy()
+
+    # 1. Veri Sütununu Sayısala Dönüştür
+    try:
+        df[data_col] = pd.to_numeric(df[data_col], errors='coerce')
+    except Exception as e:
+        raise ValueError(f"'{data_col}' sütunu sayıya dönüştürülemedi: {e}")
+
+    # 2. Tarih Sütununu Ayarla (DÜZELTİLMİŞ BLOK)
+    try:
+        # TARIH ve SAAT sütunları varsa (Access senaryosu)
+        if "SAAT" in df.columns and date_col == "TARIH":
+            print("TARIH ve SAAT sütunları birleştiriliyor...")
+            
+            # Önce her iki sütunun da datetime olduğundan emin ol
+            df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+            df['SAAT'] = pd.to_datetime(df['SAAT'], errors='coerce')
+            
+            # NaT (Not a Time) olanları (bozuk verileri) at
+            df.dropna(subset=[date_col, 'SAAT'], inplace=True)
+
+            # 1. TARIH'in SADECE gün kısmını al (örn: "2023-09-30")
+            date_str = df[date_col].dt.date.astype(str)
+            
+            # 2. SAAT'in SADECE zaman kısmını al (örn: "15:52:00")
+            time_str = df['SAAT'].dt.time.astype(str)
+            
+            # 3. İkisini birleştir ve 'datetime_index' olarak ayarla
+            df['datetime_index'] = pd.to_datetime(date_str + ' ' + time_str, errors='coerce')
+            
+            # Eğer birleştirme sonucu hata oluşmuşsa (NaT) o satırları da at
+            df.dropna(subset=['datetime_index'], inplace=True)
+            
+        else:
+             # Sadece tek bir tarih sütunu varsa (örn: PostgreSQL)
+             print(f"'{date_col}' sütunu datetime index olarak ayarlanıyor...")
+             df['datetime_index'] = pd.to_datetime(df[date_col], errors='coerce')
+             df.dropna(subset=['datetime_index'], inplace=True)
+             
+        df.set_index('datetime_index', inplace=True)
+        print("Datetime index başarıyla oluşturuldu.")
+        
+    except Exception as e:
+        # Hata mesajına hangi sütunla ilgili olduğunu ekle
+        raise ValueError(f"'{date_col}' veya 'SAAT' sütunu geçerli bir tarihe/zamana dönüştürülemedi: {e}")
+
+    # 3. İşlem Türüne Göre Toplama (Aggregation)
+    print(f"'{agg_type_str}' işlemi uygulanıyor...")
+    
+    # 'D' = Günlük (Daily) frekans
+    grouper = df.groupby(pd.Grouper(freq='D'))[data_col]
+    
+    if "Toplam (Sum)" in agg_type_str:
+        summary_df = grouper.sum().to_frame()
+        summary_df.columns = [f"Günlük Toplam ({data_col})"]
+        
+    elif "Ortalama (Average)" in agg_type_str:
+        summary_df = grouper.mean().to_frame()
+        summary_df.columns = [f"Günlük Ortalama ({data_col})"]
+        
+    elif "Fark (Maksimum - Minimum)" in agg_type_str:
+        summary_df = grouper.apply(lambda x: x.max() - x.min() if x.count() > 0 else None).to_frame()
+        summary_df.columns = [f"Günlük Fark ({data_col})"]
+        
+    else:
+        raise ValueError(f"Bilinmeyen işlem türü: {agg_type_str}")
+
+    # Tarih aralığına göre son bir filtreleme yap
+    summary_df = summary_df.loc[settings["start_date"]:settings["end_date"]]
+    summary_df.index.name = "Tarih"
+    
+    print("Günlük özetleme tamamlandı.")
+    return summary_df
