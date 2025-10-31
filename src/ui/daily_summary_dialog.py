@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QMessageBox, 
     QTableWidgetItem, QHeaderView,QFileDialog
 )
-from PyQt6.QtCore import Qt, QDate
+from PyQt6.QtCore import QDate
 
 class DailySummaryDialog(QDialog):
     def __init__(self, source_columns=None, parent=None):

@@ -112,63 +112,62 @@ def get_database_tables(config):
     return all_tables, engine
 
 
-# src/core/database.py dosyasındaki bu fonksiyonu değiştirin
 
-def run_database_query(config, target_table, baslangic_tarihi, bitis_tarihi,date_column_name):
-    """(Worker Görevi) Veritabanında tarih aralığı sorgusu çalıştırır."""
+# def run_database_query(config, target_table, baslangic_tarihi, bitis_tarihi,date_column_name):
+#     """(Worker Görevi) Veritabanında tarih aralığı sorgusu çalıştırır."""
     
-    print(f"Çalışan iş parçacığı: Sorgulama başlatıldı. Tablo: {target_table}")
+#     print(f"Çalışan iş parçacığı: Sorgulama başlatıldı. Tablo: {target_table}")
     
-    engine = create_db_engine(config)
-    db_type = config.get('type')
+#     engine = create_db_engine(config)
+#     db_type = config.get('type')
     
-    # [TARIH] sütun adını hala sabit olarak varsayıyoruz. 
-    date_column_name = "TARIH" 
+#     # [TARIH] sütun adını hala sabit olarak varsayıyoruz. 
+#     date_column_name = "TARIH" 
     
-    if db_type == 'access':
-        # --- ACCESS MANTIĞI ---
-        # Parametre Stili: ? (sıralı) | Tırnaklama: [Tablo], [Sütun]
-        formatted_table_name = f"[{target_table}]"
-        formatted_date_column = f"[{date_column_name}]"
-        sql_query = f"SELECT * FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN ? AND ? ORDER BY {formatted_date_column}"
-        params = (baslangic_tarihi, bitis_tarihi) # Tuple gönder
+#     if db_type == 'access':
+#         # --- ACCESS MANTIĞI ---
+#         # Parametre Stili: ? (sıralı) | Tırnaklama: [Tablo], [Sütun]
+#         formatted_table_name = f"[{target_table}]"
+#         formatted_date_column = f"[{date_column_name}]"
+#         sql_query = f"SELECT * FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN ? AND ? ORDER BY {formatted_date_column}"
+#         params = (baslangic_tarihi, bitis_tarihi) # Tuple gönder
         
-    elif db_type == 'sql':
-        # --- SQL SERVER MANTIĞI (pyodbc) ---
-        # Parametre Stili: ? (sıralı) | Tırnaklama: "Şema"."Tablo", "Sütun"
-        if '.' in target_table:
-            schema_name, table_name = target_table.split('.', 1)
-            formatted_table_name = f'"{schema_name}"."{table_name}"'
-        else:
-            formatted_table_name = f'"{target_table}"' 
+#     elif db_type == 'sql':
+#         # --- SQL SERVER MANTIĞI (pyodbc) ---
+#         # Parametre Stili: ? (sıralı) | Tırnaklama: "Şema"."Tablo", "Sütun"
+#         if '.' in target_table:
+#             schema_name, table_name = target_table.split('.', 1)
+#             formatted_table_name = f'"{schema_name}"."{table_name}"'
+#         else:
+#             formatted_table_name = f'"{target_table}"' 
             
-        formatted_date_column = f'"{date_column_name}"'
-        sql_query = f"SELECT * FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN ? AND ? ORDER BY {formatted_date_column}"
-        params = (baslangic_tarihi, bitis_tarihi) # Tuple gönder
+#         formatted_date_column = f'"{date_column_name}"'
+#         sql_query = f"SELECT * FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN ? AND ? ORDER BY {formatted_date_column}"
+#         params = (baslangic_tarihi, bitis_tarihi) # Tuple gönder
         
-    elif db_type == 'postgres':
-        # --- POSTGRESQL MANTIĞI (psycopg2) ---
-        # Parametre Stili: %(isim)s (isimlendirilmiş - pyformat) | Tırnaklama: "Şema"."Tablo", "Sütun"
-        if '.' in target_table:
-            schema_name, table_name = target_table.split('.', 1)
-            formatted_table_name = f'"{schema_name}"."{table_name}"'
-        else:
-            formatted_table_name = f'"{target_table}"'
+#     elif db_type == 'postgres':
+#         # --- POSTGRESQL MANTIĞI (psycopg2) ---
+#         # Parametre Stili: %(isim)s (isimlendirilmiş - pyformat) | Tırnaklama: "Şema"."Tablo", "Sütun"
+#         if '.' in target_table:
+#             schema_name, table_name = target_table.split('.', 1)
+#             formatted_table_name = f'"{schema_name}"."{table_name}"'
+#         else:
+#             formatted_table_name = f'"{target_table}"'
             
-        formatted_date_column = f'"{date_column_name}"'
+#         formatted_date_column = f'"{date_column_name}"'
         
-        # HATA DÜZELTMESİ: ? yerine %(isim)s kullanıldı
-        sql_query = f"SELECT * FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN %(baslangic)s AND %(bitis)s ORDER BY {formatted_date_column}"
-        params = {"baslangic": baslangic_tarihi, "bitis": bitis_tarihi} # Dict gönder
+#         # HATA DÜZELTMESİ: ? yerine %(isim)s kullanıldı
+#         sql_query = f"SELECT * FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN %(baslangic)s AND %(bitis)s ORDER BY {formatted_date_column}"
+#         params = {"baslangic": baslangic_tarihi, "bitis": bitis_tarihi} # Dict gönder
         
-    else:
-         raise ValueError(f"Sorgu için desteklenmeyen veritabanı türü: {db_type}")
+#     else:
+#          raise ValueError(f"Sorgu için desteklenmeyen veritabanı türü: {db_type}")
             
-    # pd.read_sql, SQLAlchemy aracılığıyla doğru sürücüye uygun parametreleri göndermeli
-    df = pd.read_sql(sql_query, engine, params=params)
+#     # pd.read_sql, SQLAlchemy aracılığıyla doğru sürücüye uygun parametreleri göndermeli
+#     df = pd.read_sql(sql_query, engine, params=params)
     
-    print(f"Çalışan iş parçacığı: Sorgulama bitti. {len(df)} satır bulundu.")
-    return df
+#     print(f"Çalışan iş parçacığı: Sorgulama bitti. {len(df)} satır bulundu.")
+#     return df
 
 
 

@@ -23,7 +23,7 @@ def save_template(template_name, template_data, parent_widget=None):
     """
     _ensure_template_dir()
 
-    # Dosya adından geçersiz karakterleri temizle (isteğe bağlı ama önerilir)
+    # Dosya adından geçersiz karakterleri temizler 
     safe_name = "".join(c for c in template_name if c.isalnum() or c in ('_', '-')).rstrip()
     if not safe_name:
         QMessageBox.warning(parent_widget, "Geçersiz Ad", "Lütfen geçerli bir taslak adı girin.")

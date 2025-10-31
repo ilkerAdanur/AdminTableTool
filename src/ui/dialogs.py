@@ -4,18 +4,14 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit, 
     QPushButton, QDialogButtonBox, QLabel, QWidget,
     QFileDialog, 
-    # --- YENİ İMPORTLAR (TemplateEditorDialog için) ---
     QGroupBox, QListWidget, QTableWidget, QAbstractItemView,
     QTableWidgetItem, QTextEdit, QSizePolicy, QSpacerItem,QMessageBox 
 )
-from PyQt6.QtCore import Qt,QDate
-
 from src.core.template_manager import save_template, load_template, get_available_templates
 
 
 
 class ConnectionDialog(QDialog):
-    # ... (Bu sınıfın kodu olduğu gibi kalacak) ...
     def __init__(self, db_type, parent=None):
         super().__init__(parent)
         self.db_type = db_type
@@ -37,7 +33,6 @@ class ConnectionDialog(QDialog):
         self.pass_edit = QLineEdit()
         self.pass_edit.setEchoMode(QLineEdit.EchoMode.Password)
         
-        # --- Access'e özel dosya seçme widget'ı ---
         self.access_widget = QWidget()
         access_layout = QHBoxLayout(self.access_widget)
         self.path_edit = QLineEdit()
@@ -49,12 +44,10 @@ class ConnectionDialog(QDialog):
         access_layout.addWidget(browse_button)
         access_layout.setContentsMargins(0,0,0,0)
 
-        # --- Arayüzü seçilen türe göre doldur ---
         if self.db_type == "access":
             self.form_layout.addRow("Dosya Yolu:", self.access_widget)
             self.setMinimumWidth(500)
         else:
-            # SQL Server, PostgreSQL vb. için ortak ayarlar
             if self.db_type == "sql":
                 self.setWindowTitle("Microsoft SQL Server Bağlantısı")
                 self.port_edit.setText("1433")
@@ -71,7 +64,6 @@ class ConnectionDialog(QDialog):
 
         main_layout.addLayout(self.form_layout)
         
-        # OK ve İptal Butonları
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
@@ -110,7 +102,6 @@ class ConnectionDialog(QDialog):
                  return             
         super().accept()
 
-
     def get_config(self):
         """Ana pencerenin bağlantı ayarlarını alması için kullanılır."""
         return self.config
@@ -126,10 +117,8 @@ class TemplateEditorDialog(QDialog):
         self.setWindowTitle("Rapor Taslağı Düzenleyici")
         self.setMinimumSize(800, 600) 
 
-        # --- Ana Dikey Layout ---
         main_layout = QVBoxLayout(self)
 
-        # --- 1. Bölüm: Taslak Adı, Kaydet/Yükle ---
         top_layout = QHBoxLayout()
         top_layout.addWidget(QLabel("Taslak Adı:"))
         self.template_name_edit = QLineEdit()
@@ -145,27 +134,24 @@ class TemplateEditorDialog(QDialog):
         top_layout.addWidget(self.save_button)
         main_layout.addLayout(top_layout)
 
-        # --- 2. Bölüm: Sütun Seçimi (Sol/Sağ) ---
         columns_layout = QHBoxLayout()
 
-        # Sol Taraf: Kaynak Sütunlar
         source_group = QGroupBox("Kaynak Sütunlar (Ham Veri)")
         source_v_layout = QVBoxLayout(source_group)
         self.source_columns_list = QListWidget()
-        self.source_columns_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection) # Çoklu seçim
+        self.source_columns_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection) 
         if source_columns:
             self.source_columns_list.addItems(source_columns)
             
         source_v_layout.addWidget(self.source_columns_list)
         columns_layout.addWidget(source_group)
 
-        # Orta Bölüm: Taşıma Butonları
         move_buttons_layout = QVBoxLayout()
         move_buttons_layout.addStretch() 
         self.add_column_button = QPushButton(">") 
         self.remove_column_button = QPushButton("<") 
-        self.move_up_button = QPushButton("↑ Yukarı") # Metinleri güncelledim
-        self.move_down_button = QPushButton("↓ Aşağı") # Metinleri güncelledim
+        self.move_up_button = QPushButton("↑ Yukarı") 
+        self.move_down_button = QPushButton("↓ Aşağı") 
         # --- BUTON BAĞLANTILARI ---
         self.add_column_button.clicked.connect(self._add_column_to_report)
         self.remove_column_button.clicked.connect(self._remove_column_from_report)
@@ -208,7 +194,7 @@ class TemplateEditorDialog(QDialog):
         columns_layout.addWidget(report_group)
         main_layout.addLayout(columns_layout)
 
-        # --- 3. Bölüm: Formül Düzenleyici ---
+        # --- Formül Düzenleyici ---
         self.formula_group = QGroupBox("Formül Düzenleyici")
         formula_layout = QFormLayout(self.formula_group)
         self.new_column_name_edit = QLineEdit()
@@ -226,7 +212,7 @@ class TemplateEditorDialog(QDialog):
         main_layout.addWidget(self.formula_group)
         self.formula_group.setVisible(False) # Başlangıçta gizli
 
-        # --- 4. Bölüm: Ana Butonlar ---
+        # --- Ana Butonlar ---
         self.button_box = QDialogButtonBox()
         self.preview_button = self.button_box.addButton("Önizle", QDialogButtonBox.ButtonRole.ActionRole)
         self.button_box.addButton(QDialogButtonBox.StandardButton.Ok)
@@ -240,7 +226,6 @@ class TemplateEditorDialog(QDialog):
 
         self._editing_formula_row = -1 
 
-    # --- Buton Fonksiyonları ---
     def _add_column_to_report(self):
         """Seçili kaynak sütunları rapor tablosuna 'Ham' olarak ekler."""
         selected_items = self.source_columns_list.selectedItems()
@@ -426,8 +411,6 @@ class TemplateEditorDialog(QDialog):
         
         self.formula_group.setVisible(False)
         self._editing_formula_row = -1
-
-
     # --- OK Butonu ---
     def accept(self):
         # Kullanıcı 'OK'e bastığında taslak verilerini topla ve sakla
@@ -442,7 +425,6 @@ class TemplateEditorDialog(QDialog):
                   return 
                   
         super().accept()
-
     # --- Ana Pencerenin Kullanması İçin ---
     def get_template_data(self):
         """'accept' içinde toplanan veriyi döndürür."""

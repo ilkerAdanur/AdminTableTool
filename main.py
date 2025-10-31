@@ -1,8 +1,8 @@
-# YENİ main.py (Sadece başlatıcı)
+# main.py (Sadece başlatıcı)
 import sys
 from PyQt6.QtWidgets import QApplication
-from src.ui.main_window import MainWindow  # Yeni yerinden import et
-from src.core.utils import register_pdf_fonts # (utils.py'ye taşıyacağız)
+from src.ui.main_window import MainWindow 
+from src.core.utils import register_pdf_fonts 
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
