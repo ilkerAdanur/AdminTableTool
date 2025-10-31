@@ -16,7 +16,6 @@ except ImportError:
 def create_db_engine(config):
     """
     Gelen 'config' sözlüğüne göre doğru SQLAlchemy motorunu (engine) oluşturur.
-    Her veritabanı türü kendi 'try-except' bloğu içinde güvenli bir şekilde ele alınır.
     """
     db_type = config.get('type')
     
@@ -40,7 +39,7 @@ def create_db_engine(config):
             if not server_name or not database_name:
                 raise ValueError("SQL Server için 'host' (Sunucu) ve 'database' (Veritabanı Adı) sağlanmadı.")
             
-            # Windows Authentication mantığı (Port'a veya User/Pass'a ihtiyaç duymaz)
+            # Windows Authentication mantığı
             engine_url = (
                 f"mssql+pyodbc://{server_name}/{database_name}"
                 f"?driver={urllib.parse.quote_plus(driver)}"
@@ -70,7 +69,6 @@ def create_db_engine(config):
 
     except Exception as e:
         print(f"HATA: '{db_type}' veritabanına bağlanılamadı. Hata: {e}")
-        # Hatanın ana arayüzde gösterilmesi için orijinal hatayı (e) yükselt
         raise e
 
 def get_database_tables(config):
@@ -84,13 +82,12 @@ def get_database_tables(config):
     db_type = config.get('type')
     
     if db_type == 'access':
-        # --- ACCESS MANTIĞI (Basit) ---
+        # Access: Basit liste
         table_names = inspector.get_table_names()
-        # Access'in sistem tablolarını filtrele
         user_tables = [name for name in table_names if not name.startswith("MSys")]
         all_tables = user_tables
     else:
-        # --- SQL SERVER / POSTGRESQL MANTIĞI (Şemalı) ---
+        # SQL Server / PostgreSQL: Şemalı liste
         schema_names = inspector.get_schema_names()
         
         system_schemas = [
@@ -105,134 +102,57 @@ def get_database_tables(config):
             if schema_name not in system_schemas and not schema_name.startswith('pg_'):
                 tables_in_schema = inspector.get_table_names(schema=schema_name)
                 for table_name in tables_in_schema:
-                    # Tablo adını "şema.tablo" formatında ekle
                     all_tables.append(f"{schema_name}.{table_name}")
 
     print(f"Çalışan iş parçacığı: Bulunan tablolar: {all_tables}")
     return all_tables, engine
 
-
-
-# def run_database_query(config, target_table, baslangic_tarihi, bitis_tarihi,date_column_name):
-#     """(Worker Görevi) Veritabanında tarih aralığı sorgusu çalıştırır."""
+def run_database_query(config, target_table, baslangic_tarihi, bitis_tarihi, date_column_name):
+    """(Worker Görevi) Veritabanında tarih aralığı sorgusu çalıştırır."""
     
-#     print(f"Çalışan iş parçacığı: Sorgulama başlatıldı. Tablo: {target_table}")
+    print(f"Çalışan iş parçacığı: Sorgulama başlatıldı. Tablo: {target_table}, Tarih Sütunu: {date_column_name}")
     
-#     engine = create_db_engine(config)
-#     db_type = config.get('type')
+    engine = create_db_engine(config)
+    db_type = config.get('type')
     
-#     # [TARIH] sütun adını hala sabit olarak varsayıyoruz. 
-#     date_column_name = "TARIH" 
-    
-#     if db_type == 'access':
-#         # --- ACCESS MANTIĞI ---
-#         # Parametre Stili: ? (sıralı) | Tırnaklama: [Tablo], [Sütun]
-#         formatted_table_name = f"[{target_table}]"
-#         formatted_date_column = f"[{date_column_name}]"
-#         sql_query = f"SELECT * FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN ? AND ? ORDER BY {formatted_date_column}"
-#         params = (baslangic_tarihi, bitis_tarihi) # Tuple gönder
+    if db_type == 'access':
+        # Access: [Tablo] [Sütun] ve ? parametre stili
+        formatted_table_name = f"[{target_table}]"
+        formatted_date_column = f"[{date_column_name}]" 
+        sql_query = f"SELECT * FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN ? AND ? ORDER BY {formatted_date_column}"
+        params = (baslangic_tarihi, bitis_tarihi)
         
-#     elif db_type == 'sql':
-#         # --- SQL SERVER MANTIĞI (pyodbc) ---
-#         # Parametre Stili: ? (sıralı) | Tırnaklama: "Şema"."Tablo", "Sütun"
-#         if '.' in target_table:
-#             schema_name, table_name = target_table.split('.', 1)
-#             formatted_table_name = f'"{schema_name}"."{table_name}"'
-#         else:
-#             formatted_table_name = f'"{target_table}"' 
+    elif db_type == 'sql':
+        # SQL Server: "Şema"."Tablo" "Sütun" ve ? parametre stili
+        if '.' in target_table:
+            schema_name, table_name = target_table.split('.', 1)
+            formatted_table_name = f'"{schema_name}"."{table_name}"'
+        else:
+            formatted_table_name = f'"{target_table}"' 
             
-#         formatted_date_column = f'"{date_column_name}"'
-#         sql_query = f"SELECT * FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN ? AND ? ORDER BY {formatted_date_column}"
-#         params = (baslangic_tarihi, bitis_tarihi) # Tuple gönder
+        formatted_date_column = f'"{date_column_name}"' 
+        sql_query = f"SELECT * FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN ? AND ? ORDER BY {formatted_date_column}"
+        params = (baslangic_tarihi, bitis_tarihi)
         
-#     elif db_type == 'postgres':
-#         # --- POSTGRESQL MANTIĞI (psycopg2) ---
-#         # Parametre Stili: %(isim)s (isimlendirilmiş - pyformat) | Tırnaklama: "Şema"."Tablo", "Sütun"
-#         if '.' in target_table:
-#             schema_name, table_name = target_table.split('.', 1)
-#             formatted_table_name = f'"{schema_name}"."{table_name}"'
-#         else:
-#             formatted_table_name = f'"{target_table}"'
+    elif db_type == 'postgres':
+        # PostgreSQL: "Şema"."Tablo" "Sütun" ve %(isim)s parametre stili
+        if '.' in target_table:
+            schema_name, table_name = target_table.split('.', 1)
+            formatted_table_name = f'"{schema_name}"."{table_name}"'
+        else:
+            formatted_table_name = f'"{target_table}"'
             
-#         formatted_date_column = f'"{date_column_name}"'
+        formatted_date_column = f'"{date_column_name}"' 
+        sql_query = f"SELECT * FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN %(baslangic)s AND %(bitis)s ORDER BY {formatted_date_column}"
+        params = {"baslangic": baslangic_tarihi, "bitis": bitis_tarihi}
         
-#         # HATA DÜZELTMESİ: ? yerine %(isim)s kullanıldı
-#         sql_query = f"SELECT * FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN %(baslangic)s AND %(bitis)s ORDER BY {formatted_date_column}"
-#         params = {"baslangic": baslangic_tarihi, "bitis": bitis_tarihi} # Dict gönder
-        
-#     else:
-#          raise ValueError(f"Sorgu için desteklenmeyen veritabanı türü: {db_type}")
+    else:
+         raise ValueError(f"Sorgu için desteklenmeyen veritabanı türü: {db_type}")
             
-#     # pd.read_sql, SQLAlchemy aracılığıyla doğru sürücüye uygun parametreleri göndermeli
-#     df = pd.read_sql(sql_query, engine, params=params)
+    df = pd.read_sql(sql_query, engine, params=params)
     
-#     print(f"Çalışan iş parçacığı: Sorgulama bitti. {len(df)} satır bulundu.")
-#     return df
-
-
-
-# def run_database_query(config, target_table, baslangic_tarihi, bitis_tarihi):
-#     """(Worker Görevi) Veritabanında tarih aralığı sorgusu çalıştırır."""
-    
-#     print(f"Çalışan iş parçacığı: Sorgulama başlatıldı. Tablo: {target_table}")
-    
-#     engine = create_db_engine(config)
-#     db_type = config.get('type')
-    
-#     # [TARIH] sütun adını hala sabit olarak varsayıyoruz. 
-#     # Bu, bir sonraki adımda düzeltmemiz gereken en önemli şey.
-#     date_column_name = "TARIH" 
-    
-#     if db_type == 'access':
-#         # --- ACCESS MANTIĞI ---
-#         # Parametre Stili: ? (sıralı)
-#         # Tırnaklama: [Tablo], [Sütun]
-#         formatted_table_name = f"[{target_table}]"
-#         formatted_date_column = f"[{date_column_name}]"
-#         sql_query = f"SELECT * FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN ? AND ? ORDER BY {formatted_date_column}"
-#         params = (baslangic_tarihi, bitis_tarihi)
-        
-#     elif db_type == 'sql':
-#         # --- YENİ EKLENEN SQL SERVER MANTIĞI ---
-#         # Parametre Stili: ? (sıralı)
-#         # Tırnaklama: "Şema"."Tablo", "Sütun"
-#         if '.' in target_table:
-#             schema_name, table_name = target_table.split('.', 1)
-#             formatted_table_name = f'"{schema_name}"."{table_name}"'
-#         else:
-#             # Hata ekranında 'dbo.ogrenciler' gördüğümüz için şema.tablo formatı geliyor olmalı
-#             formatted_table_name = f'"{target_table}"' 
-            
-#         formatted_date_column = f'"{date_column_name}"'
-        
-#         # HATA DÜZELTMESİ: %(baslangic)s yerine ? kullanıldı
-#         sql_query = f"SELECT * FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN ? AND ? ORDER BY {formatted_date_column}"
-#         params = (baslangic_tarihi, bitis_tarihi)
-        
-#     elif db_type == 'postgres':
-#         # --- POSTGRESQL MANTIĞI ---
-#         # Parametre Stili: %(param)s (isimlendirilmiş)
-#         # Tırnaklama: "Şema"."Tablo", "Sütun"
-#         if '.' in target_table:
-#             schema_name, table_name = target_table.split('.', 1)
-#             formatted_table_name = f'"{schema_name}"."{table_name}"'
-#         else:
-#             formatted_table_name = f'"{target_table}"'
-            
-#         formatted_date_column = f'"{date_column_name}"'
-        
-#         sql_query = f"SELECT * FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN %(baslangic)s AND %(bitis)s ORDER BY {formatted_date_column}"
-#         params = {"baslangic": baslangic_tarihi, "bitis": bitis_tarihi}
-        
-#     else:
-#          raise ValueError(f"Sorgu için desteklenmeyen veritabanı türü: {db_type}")
-            
-#     df = pd.read_sql(sql_query, engine, params=params)
-    
-#     print(f"Çalışan iş parçacığı: Sorgulama bitti. {len(df)} satır bulundu.")
-#     return df
-
-
+    print(f"Çalışan iş parçacığı: Sorgulama bitti. {len(df)} satır bulundu.")
+    return df
 
 def load_excel_file(tam_yol):
     """(Worker Görevi) Excel okuma işi"""
@@ -240,4 +160,3 @@ def load_excel_file(tam_yol):
     df = pd.read_excel(tam_yol, engine=EXCEL_ENGINE)
     print(f"Çalışan iş parçacığı: Excel okuma bitti. {len(df)} satır bulundu.")
     return df
-
