@@ -113,3 +113,36 @@ def get_tables_task(config):
         print(f"!!! HATA (get_tables_task içinde): {e}")
         traceback.print_exc()
         raise e
+    
+def fetch_full_schema_task(config, engine, table_list):
+    """
+    (Worker Görevi) Verilen tablo listesindeki TÜM tabloların
+    sütunlarını çeker ve bir sözlük olarak döndürür.
+    """
+    print(f"Çalışan iş parçacığı: Tam veritabanı şeması çekiliyor...")
+    inspector = inspect(engine) # inspect, ana import'ta olmalı
+    full_schema = {}
+    db_type = config.get('type')
+
+    for table_name_full in table_list:
+        try:
+            schema_name = None
+            table_only_name = table_name_full
+
+            # Access dışındaki DB'ler için şema adını ayır (örn: "dbo.ogrenciler")
+            if db_type != 'access' and '.' in table_name_full:
+                schema_name, table_only_name = table_name_full.split('.', 1)
+
+            columns_info = inspector.get_columns(table_only_name, schema=schema_name)
+            column_names = [col['name'] for col in columns_info]
+            full_schema[table_name_full] = column_names
+
+        except Exception as e:
+            # Bir tablo okunamasa bile devam et
+            print(f"HATA: '{table_name_full}' tablosunun sütunları okunamadı: {e}")
+            full_schema[table_name_full] = [] # Hata durumunda boş liste
+
+    print(f"Çalışan iş parçacığı: Tam şema çekildi. {len(full_schema)} tablo bulundu.")
+    return full_schema
+
+    

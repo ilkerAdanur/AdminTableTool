@@ -31,7 +31,7 @@ from src.core.report_manager import get_saved_report_dates # Yeni report manager
 from src.core.metadata_manager import save_report_comment,load_report_comments
 from src.core.tasks import (
     fetch_and_apply_task, get_column_names_task, run_summary_task
-    ,get_tables_task
+    ,get_tables_task,fetch_full_schema_task
 )
 
 from src.core.utils import register_pdf_fonts
@@ -68,7 +68,7 @@ class MainWindow(QMainWindow):
 
         self.report_history_files = [] # Rapor geçmişi dosyalarını tutar
         self.current_report_index = 0   
-        
+        self.full_schema_data = {}
         self.threadpool = QThreadPool()
         print(f"Multithreading için {self.threadpool.maxThreadCount()} adet iş parçacığı mevcut.")
 
@@ -187,76 +187,35 @@ class MainWindow(QMainWindow):
         self.threadpool.start(worker)
 
     def _on_tables_loaded(self, results):
-        """(Callback) Tablo listesini alır, tabloyu seçtirir ve tarih sütununu seçtirir."""
+        """
+        (Callback) Tablo listesini alır ve TÜM sütunları çekmek için 
+        yeni worker (fetch_full_schema_task) başlatır.
+        """
         self.close_loading_dialog()
-        
+
         try:
             table_list, engine = results 
         except Exception as e:
             self._on_task_error(f"Tablo yükleme sonucu işlenemedi: {results} - Hata: {e}")
             return
-            
+
         self.db_engine = engine 
-        
+
         if not table_list:
             QMessageBox.warning(self, "Hata", "Veritabanında okunabilir bir tablo bulunamadı.")
             self.db_config = {} 
             self.update_connection_status()
             return
-            
-        table_name, ok = QInputDialog.getItem(
-            self, "Tablo Seç", "Lütfen sorgulanacak tabloyu seçin:",
-            table_list, 0, False
-        )
-        
-        if ok and table_name:
-            self.target_table = table_name
-            print(f"Kullanıcı '{table_name}' tablosunu seçti. Şimdi sütunlar çekilecek...")
-            self.show_loading_dialog(f"'{table_name}' tablosunun sütunları okunuyor...")
-            worker = Worker(get_column_names_task, self.db_config, self.target_table)
-            worker.signals.finished.connect(self._on_columns_loaded_for_date_selection)
-            worker.signals.error.connect(self._on_task_error)
-            self.threadpool.start(worker)
-        else:
-            self.db_config = {} 
-            self.target_table = None
-            self.target_date_column = None
-            print("Tablo seçimi iptal edildi.")
-            self.update_connection_status()
 
-    def _on_columns_loaded_for_date_selection(self, column_names):
-        """(Callback) Sütun adları geldikten sonra kullanıcıya tarih sütununu seçtirir."""
-        self.close_loading_dialog()
+        print("Tüm tabloların sütunları çekiliyor...")
+        self.show_loading_dialog(f"{len(table_list)} tablonun şeması okunuyor...")
 
-        if not column_names:
-             QMessageBox.warning(self, "Sütun Hatası", f"'{self.target_table}' tablosunun sütunları okunamadı.")
-             self.db_config = {}
-             self.target_table = None
-             self.target_date_column = None
-             self.update_connection_status()
-             return
+        # Yeni task'ı (fetch_full_schema_task) başlat
+        worker = Worker(fetch_full_schema_task, self.db_config, self.db_engine, table_list)
+        worker.signals.finished.connect(self._on_full_schema_loaded) # YENİ Callback'e bağla
+        worker.signals.error.connect(self._on_task_error)
+        self.threadpool.start(worker)
 
-        date_col, ok = QInputDialog.getItem(
-            self, "Tarih Sütununu Seç",
-            "Lütfen tarih filtrelemesi için kullanılacak sütunu seçin:",
-            column_names, 0, False
-        )
-
-        if ok and date_col:
-            self.target_date_column = date_col
-            print(f"Kullanıcı tarih sütunu olarak '{date_col}' seçti.")
-            try:
-                self.db_explorer.populate_tree(self.db_config, self.target_table, column_names)
-            except Exception as e:
-                print(f"HATA: Veritabanı Gezgini doldurulamadı: {e}")
-        else:
-            self.db_config = {}
-            self.target_table = None
-            self.target_date_column = None
-            self.db_explorer.clear_tree()
-            print("Tarih sütunu seçimi iptal edildi.")
-
-        self.update_connection_status()
 
     # --- Ana Raporlama İş Akışı ---
 
@@ -315,32 +274,23 @@ class MainWindow(QMainWindow):
 
     def open_template_editor(self):
         """'Rapor Taslaklarını Yönet' menüsüne tıklandığında çalışır."""
-        source_cols = []
-        
-        if not self.df.empty:
-            source_cols = list(self.df.columns)
-            self._show_template_editor_dialog(source_cols)
-            
-        elif self.db_config and self.target_table:
-            self.show_loading_dialog("Kaynak sütunlar okunuyor...")
-            worker = Worker(get_column_names_task, self.db_config, self.target_table)
-            worker.signals.finished.connect(self._on_columns_loaded_for_editor) 
-            worker.signals.error.connect(self._on_task_error)
-            self.threadpool.start(worker)
-        else:
-             QMessageBox.warning(self, "Bağlantı Gerekli", 
-                                 "Taslak düzenleyiciyi açmak için lütfen önce bir veritabanına bağlanın.")
-             return
 
-    def _on_columns_loaded_for_editor(self, column_names):
-        """(Callback) Veritabanından sütun adları gelince Taslak Editörünü açar."""
-        self.close_loading_dialog()
-        if column_names:
-            print(f"Kaynak sütunlar veritabanından alındı: {column_names}")
-            self._show_template_editor_dialog(column_names)
-        else:
-            QMessageBox.warning(self, "Sütun Hatası", "Seçili tablonun sütun adları okunamadı.")
+        if not (self.db_config and self.target_table and self.full_schema_data):
+            QMessageBox.warning(self, "Bağlantı Gerekli", 
+                                "Lütfen önce bir veritabanına bağlanın (Ana tablo ve tarih sütunu seçimi tamamlanmış olmalı).")
+            return
 
+        # Veriyi DB'den çekmek yerine, hafızadaki tam şemadan al
+        source_cols = self.full_schema_data.get(self.target_table, [])
+
+        if not source_cols:
+            QMessageBox.warning(self, "Sütun Hatası", 
+                                f"Ana tablo '{self.target_table}' için sütunlar bulunamadı.")
+            return
+
+        self._show_template_editor_dialog(source_cols)
+
+    
     def _show_template_editor_dialog(self, source_columns):
         """TemplateEditorDialog'u açar ve sonucu işler."""
         dialog = TemplateEditorDialog(source_columns=source_columns, parent=self)
@@ -671,36 +621,25 @@ class MainWindow(QMainWindow):
         
     def open_daily_summary_dialog(self):
         """'Günlük Özet Raporu' menüsüne tıklandığında çalışır."""
-        source_cols = [] 
-        
-        if self.db_config and self.target_table:
-            # Her zaman DB'den en güncel sütun listesini al
-             self._fetch_columns_and_open_summary_dialog()
-        else:
-             QMessageBox.warning(self, "Bağlantı Gerekli", 
-                                 "Günlük özet aracını kullanmak için lütfen önce bir veritabanına bağlanın.")
-             return
 
-    def _fetch_columns_and_open_summary_dialog(self):
-        """(Yardımcı) Sütunları DB'den çeker ve Günlük Özet diyaloğunu açar."""
-        self.show_loading_dialog("Kaynak sütunlar okunuyor...")
-        worker = Worker(get_column_names_task, self.db_config, self.target_table)
-        worker.signals.finished.connect(self._on_columns_loaded_for_summary_dialog) 
-        worker.signals.error.connect(self._on_task_error)
-        self.threadpool.start(worker)
+        if not (self.db_config and self.target_table and self.full_schema_data):
+            QMessageBox.warning(self, "Bağlantı Gerekli", 
+                                "Lütfen önce bir veritabanına bağlanın (Ana tablo ve tarih sütunu seçimi tamamlanmış olmalı).")
+            return
 
-    def _on_columns_loaded_for_summary_dialog(self, column_names):
-        """(Callback) Sütun adları gelince Günlük Özet diyaloğunu açar."""
-        self.close_loading_dialog()
-        if column_names:
-            print(f"Kaynak sütunlar veritabanından alındı: {column_names}")
-            
-            dialog = DailySummaryDialog(source_columns=column_names, parent=self)
-            dialog.exec() 
-            print("Günlük Özet Diyaloğu kapatıldı.")
-        else:
-            QMessageBox.warning(self, "Sütun Hatası", "Seçili tablonun sütun adları okunamadı.")
+        # Veriyi DB'den çekmek yerine, hafızadaki tam şemadan al
+        source_cols = self.full_schema_data.get(self.target_table, [])
 
+        if not source_cols:
+            QMessageBox.warning(self, "Sütun Hatası", 
+                                f"Ana tablo '{self.target_table}' için sütunlar bulunamadı.")
+            return
+
+        self._show_daily_summary_dialog(source_cols)
+
+    
+
+    
     def run_daily_summary_worker(self, settings, dialog_instance):
         """DailySummaryDialog tarafından çağrılır. Worker'ı başlatır."""
         
@@ -890,6 +829,61 @@ class MainWindow(QMainWindow):
         self.threadpool.waitForDone()
         print("Tüm görevler tamamlandı. Uygulama kapanıyor.")
         event.accept()
+    def _on_full_schema_loaded(self, full_schema_data):
+        """
+        (Callback) Tüm şema verisi geldikten sonra çalışır.
+        Gezgini doldurur ve kullanıcıya ana tablo/sütun seçtirir.
+        """
+        self.close_loading_dialog()
+
+        if not full_schema_data:
+            self._on_task_error("Veritabanı şeması okunamadı.")
+            return
+
+        print(f"Tam şema yüklendi. {len(full_schema_data)} tablo işlendi.")
+        self.full_schema_data = full_schema_data # Tam şemayı sakla
+
+        # 1. Veritabanı Gezginini Doldur (Yeni populate_tree fonksiyonunu çağırır)
+        try:
+            self.db_explorer.populate_tree(self.db_config, self.full_schema_data)
+        except Exception as e:
+            print(f"HATA: Veritabanı Gezgini doldurulamadı: {e}")
+
+        # 2. Ana Uygulama için Ana Tabloyu Seçtir
+        table_list = sorted(list(full_schema_data.keys())) # Tabloları sırala
+        table_name, ok = QInputDialog.getItem(
+            self, "Ana Tabloyu Seç", 
+            "Lütfen ana raporlama için kullanılacak tabloyu seçin:",
+            table_list, 0, False
+        )
+
+        if not (ok and table_name):
+            self._on_task_error("Ana tablo seçimi iptal edildi.") # Bağlantıyı sıfırla
+            return
+
+        self.target_table = table_name
+
+        # 3. Ana Tarih Sütununu Seçtir
+        column_names = full_schema_data.get(table_name, [])
+        if not column_names:
+            self._on_task_error(f"'{table_name}' tablosunun sütunları okunamadı.")
+            return
+
+        date_col, ok = QInputDialog.getItem(
+            self, "Tarih Sütununu Seç",
+            f"'{table_name}' tablosu için tarih sütununu seçin:",
+            column_names, 0, False
+        )
+
+        if ok and date_col:
+            self.target_date_column = date_col
+            print(f"Kullanıcı ana tablo olarak '{table_name}', tarih sütunu olarak '{date_col}' seçti.")
+        else:
+            self._on_task_error("Tarih sütunu seçimi iptal edildi.")
+            return
+
+        # 4. Bağlantıyı tamamla
+        self.update_connection_status()
 
 # --- Ana Uygulama Başlangıcı ---
 if __name__ == '__main__':

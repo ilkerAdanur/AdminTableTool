@@ -21,21 +21,16 @@ class DbExplorerWindow(QWidget):
         self.treeWidget_DB.setHeaderLabel("Veritabanı Yapısı") 
         self.treeWidget_DB.setHeaderHidden(False)
 
-    def populate_tree(self, db_config, target_table, column_names):
+    
+    def clear_tree(self):
+        """Ağaç görünümünü temizler."""
+        self.treeWidget_DB.clear()
+
+    def populate_tree(self, db_config, full_schema_data):
         """
-        Ağaç görünümünü gelen veritabanı bilgileriyle doldurur.
+        Ağaç görünümünü TÜM veritabanı şemasıyla (sözlük) doldurur.
         """
-        # --- HATA AYIKLAMA İÇİN PRINT (KALABİLİR) ---
-        print("\n--- DbExplorer: populate_tree çağrıldı ---")
-        try:
-             print(f"  db_config: {db_config.get('type')}")
-        except:
-             print(f"  db_config: (Yazdırılamadı)")
-        print(f"  target_table: {target_table}")
-        print(f"  column_names (ilk 5): {column_names[:5] if column_names else 'BOŞ'}")
-        print("------------------------------------------")
-        
-        self.clear_tree() 
+        self.clear_tree()
 
         # 1. Ana Veritabanı Öğesi
         db_type = db_config.get('type', 'Bilinmiyor')
@@ -44,35 +39,36 @@ class DbExplorerWindow(QWidget):
             db_name = os.path.basename(db_config.get('path', 'Access DB'))
         else:
             db_name = db_config.get('database', 'Bilinmeyen DB')
-            
+
         db_item = QTreeWidgetItem(self.treeWidget_DB, [f"{db_name} ({db_type.capitalize()})"])
-        
-        # --- DÜZELTME: Doğru enum kullanıldı (getattr(..., 0) kaldırıldı) ---
         db_item.setIcon(0, self.style().standardIcon(QStyle.StandardPixmap.SP_DriveHDIcon)) 
 
         # 2. Tablolar Öğesi
         tables_item = QTreeWidgetItem(db_item, ["Tables"])
-        
-        # 3. Seçili Tablo Öğesi
-        table_item = QTreeWidgetItem(tables_item, [target_table])
-        
-        # --- DÜZELTME: Doğru enum kullanıldı ---
-        table_item.setIcon(0, self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView)) 
 
-        # 4. Sütunlar Öğesi
-        columns_item = QTreeWidgetItem(table_item, ["Columns"])
-        
-        # 5. Sütun Adlarını Ekle
-        if column_names: 
-            for col_name in column_names:
-                col_item = QTreeWidgetItem(columns_item, [col_name])
-                
-                # --- DÜZELTME: Doğru enum kullanıldı ---
-                col_item.setIcon(0, self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon)) 
-                col_item.setData(0, Qt.ItemDataRole.UserRole, f"[{col_name}]") 
+        if not full_schema_data:
+            tables_item.setText(0, "Tables (No tables found or schema empty)")
+            self.treeWidget_DB.expandAll()
+            return
+
+        # 3. Tüm Tabloları ve Sütunları Döngüye Al
+        for table_name_full, column_names in sorted(full_schema_data.items()):
+
+            # 3a. Tablo Öğesi
+            table_item = QTreeWidgetItem(tables_item, [table_name_full])
+            table_item.setIcon(0, self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView)) 
+
+            # 3b. Sütunlar Alt Öğesi
+            columns_item = QTreeWidgetItem(table_item, ["Columns"])
+
+            # 3c. Sütun Adlarını Ekle
+            if column_names: 
+                for col_name in column_names:
+                    col_item = QTreeWidgetItem(columns_item, [col_name])
+                    col_item.setIcon(0, self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon)) 
+                    col_item.setData(0, Qt.ItemDataRole.UserRole, f"[{col_name}]") 
+            else:
+                columns_item.setText(0, "Columns (Could not read)")
 
         self.treeWidget_DB.expandAll()
 
-    def clear_tree(self):
-        """Ağaç görünümünü temizler."""
-        self.treeWidget_DB.clear()
