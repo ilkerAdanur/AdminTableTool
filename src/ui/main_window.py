@@ -11,11 +11,12 @@ import pandas as pd
 from PyQt6.QtCore import QRunnable, QThreadPool, QObject, pyqtSignal, Qt, QDate
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QTableWidgetItem, 
-    QMessageBox, QProgressDialog, 
+    QMessageBox, QProgressDialog,QInputDialog, QDialog,
     QFileDialog, QInputDialog, QLabel
 )
 from PyQt6.QtGui import QCloseEvent
 from PyQt6.uic import loadUi 
+from .db_explorer_window import DbExplorerWindow
 
 # Göreli UI importları
 from .dialogs import ConnectionDialog, TemplateEditorDialog
@@ -27,10 +28,12 @@ from src.core.file_exporter import get_yeni_kayit_yolu, task_run_excel, task_run
 from src.core.data_processor import apply_template
 from src.core.template_manager import load_template, get_available_templates
 from src.core.report_manager import get_saved_report_dates # Yeni report manager
+from src.core.metadata_manager import save_report_comment,load_report_comments
 from src.core.tasks import (
     fetch_and_apply_task, get_column_names_task, run_summary_task
     ,get_tables_task
 )
+
 from src.core.utils import register_pdf_fonts
 from src.threading.workers import Worker, WorkerSignals
 
@@ -61,6 +64,8 @@ class MainWindow(QMainWindow):
         self.target_date_column = None 
         self.currently_viewing_excel = None 
 
+        self.db_explorer = DbExplorerWindow()
+
         self.report_history_files = [] # Rapor geçmişi dosyalarını tutar
         self.current_report_index = 0   
         
@@ -72,7 +77,9 @@ class MainWindow(QMainWindow):
 
         self.status_light = QLabel()
         self.statusbar.addPermanentWidget(self.status_light)
+        self.commentLabel.setVisible(False)
         
+        self.df = pd.DataFrame()
         # --- Sinyal-Slot Bağlantıları ---
         self._connect_signals()
 
@@ -103,8 +110,9 @@ class MainWindow(QMainWindow):
         try:
             self.actionTaslak_Duzenle.triggered.connect(self.open_template_editor)
             self.actionGunluk_Ozet_Raporu.triggered.connect(self.open_daily_summary_dialog)
+            self.actionVeritabani_Gezgini.triggered.connect(self.db_explorer.show)
         except AttributeError as e:
-             print(f"UYARI: 'arayuz.ui' dosyasındaki Ayarlar/Araçlar menü eylemleri kodla eşleşmiyor. {e}")
+             print(f"UYARI: 'arayuz.ui' dosyasındaki Ayarlar/Araçlar/Gezgin menü eylemleri kodla eşleşmiyor. {e}")
 
         # Ana Butonlar
         try:
@@ -134,6 +142,7 @@ class MainWindow(QMainWindow):
         self.target_date_column = None
         self.currently_viewing_excel = None
         self.raw_df_from_excel = None
+        self.db_explorer.clear_tree()
         self.df = pd.DataFrame()
         self._populate_table(self.df)
         
@@ -163,6 +172,7 @@ class MainWindow(QMainWindow):
             print("Bağlantı ayarları iptal edildi.")
             self.db_config = {}
             self.target_table = None
+            self.db_explorer.clear_tree()
             self.target_date_column = None
             self.currently_viewing_excel = None
             self.raw_df_from_excel = None
@@ -235,10 +245,15 @@ class MainWindow(QMainWindow):
         if ok and date_col:
             self.target_date_column = date_col
             print(f"Kullanıcı tarih sütunu olarak '{date_col}' seçti.")
+            try:
+                self.db_explorer.populate_tree(self.db_config, self.target_table, column_names)
+            except Exception as e:
+                print(f"HATA: Veritabanı Gezgini doldurulamadı: {e}")
         else:
             self.db_config = {}
             self.target_table = None
             self.target_date_column = None
+            self.db_explorer.clear_tree()
             print("Tarih sütunu seçimi iptal edildi.")
 
         self.update_connection_status()
@@ -250,6 +265,9 @@ class MainWindow(QMainWindow):
         
         self.currently_viewing_excel = None
         self.raw_df_from_excel = None 
+        
+        self.commentLabel.setVisible(False)
+        self.commentLabel.setText("")
         
         if not self.db_config or not self.target_table or not self.target_date_column:
             QMessageBox.warning(self, "Eksik Bilgi", 
@@ -425,6 +443,17 @@ class MainWindow(QMainWindow):
         folder_path = self.tarihSecCBox.currentData()
         if not folder_path: # "Kaydedilmiş Rapor Seç..." seçiliyse
             self.report_history_files = []
+            self.df = pd.DataFrame() 
+            self._populate_table(self.df)
+
+            # Yorum kutusunu temizle ve gizle
+            self.commentLabel.setVisible(False)
+            self.commentLabel.setText("")
+
+            self.currently_viewing_excel = None
+            self.raw_df_from_excel = None
+            self.statusbar.clearMessage()
+            self.update_connection_status()
             return
             
         try:
@@ -486,60 +515,116 @@ class MainWindow(QMainWindow):
             self._load_excel_from_history()
 
     def _on_excel_loaded(self, loaded_raw_df):
-        """(Callback) Excel'den ham veri gelince saklar ve seçili taslağı uygular."""
-        self.close_loading_dialog() 
-        
-        if loaded_raw_df is None or loaded_raw_df.empty:
-             QMessageBox.warning(self, "Excel Boş", "Yüklenen Excel dosyasında veri bulunamadı.")
-             self.raw_df_from_excel = None
-             self.df = pd.DataFrame()
-             self._populate_table(self.df)
-             self.update_connection_status()
-             self.statusbar.clearMessage()
-             return
+            """(Callback) Excel'den ham veri gelince saklar, yorumları yükler ve seçili taslağı uygular."""
+            self.close_loading_dialog()
+            
+            if loaded_raw_df is None or loaded_raw_df.empty:
+                QMessageBox.warning(self, "Excel Boş", "Yüklenen Excel dosyasında veri bulunamadı.")
+                self.raw_df_from_excel = None
+                self.df = pd.DataFrame()
+                self._populate_table(self.df)
+                self.update_connection_status()
+                self.statusbar.clearMessage()
+                self.commentLabel.setVisible(False) 
+                return
 
-        self.raw_df_from_excel = loaded_raw_df.copy()
-        print("Excel'den ham veri saklandı.")
+            # 1. Ham veriyi sakla
+            self.raw_df_from_excel = loaded_raw_df.copy()
+            print("Excel'den ham veri saklandı.")
 
-        self._apply_template_to_loaded_data()
+            # 2. Yorumları Yükle ve Göster
+            folder_path = self.tarihSecCBox.currentData()
+            file_name = self.currently_viewing_excel 
+            
+            if folder_path and file_name:
+                full_path = os.path.join(folder_path, file_name)
+                comments = load_report_comments(full_path) 
+                
+                if comments:
+                    formatted_comments = "Rapor Yorumları:\n"
+                    for comment_data in comments[-3:]: 
+                        user = comment_data.get('user', 'Bilinmeyen')
+                        timestamp = comment_data.get('timestamp', '')
+                        comment_text = comment_data.get('comment', '...')
+                        
+                        try:
+                            ts_obj = datetime.fromisoformat(timestamp)
+                            timestamp_str = ts_obj.strftime('%d.%m.%Y %H:%M')
+                        except:
+                            timestamp_str = "Bilinmeyen Tarih"
+                        
+                        formatted_comments += f"- [{timestamp_str} - {user}]: {comment_text}\n"
+                    
+                    self.commentLabel.setText(formatted_comments.strip())
+                    self.commentLabel.setVisible(True) 
+                else:
+                    self.commentLabel.setVisible(False) 
+                    self.commentLabel.setText("")
+            else:
+                self.commentLabel.setVisible(False) 
+            
+            # 3. O an seçili olan taslağı uygula
+            self._apply_template_to_loaded_data()
 
-        status_text = f"Gösterilen: {self.currently_viewing_excel} ({self.current_report_index + 1} / {len(self.report_history_files)})"
-        self.statusbar.showMessage(status_text)
-
-    # --- Dışa Aktarma Fonksiyonları ---
+            # 4. Durum çubuğunu son haliyle güncelle
+            # --- HATA DÜZELTMESİ BURADA ---
+            status_text = f"Gösterilen: {self.currently_viewing_excel} ({self.current_report_index + 1} / {len(self.report_history_files)})"
+            # -----------------------------
+            self.statusbar.showMessage(status_text)
+        # --- Dışa Aktarma Fonksiyonları ---
 
     def export_excel(self):
-        """Veriyi (self.df) Excel'e aktarır."""
+        """Veriyi (self.df) Excel'e aktarır ve yorum sorar."""
         if self.df.empty: 
             QMessageBox.warning(self, "Uyarı", "Dışa aktarılacak veri bulunamadı.")
             return
 
+        # 1. Yorumu Sor
+        # (getText yerine getMultiLineText kullanarak çok satırlı yorumlara izin verelim)
+        comment, ok = QInputDialog.getMultiLineText(self, "Rapor Yorumu", 
+                                                    "Rapor için bir yorum ekleyin (opsiyonel):")
+        if not ok:
+            print("Excel'e aktarma iptal edildi.")
+            return # Kullanıcı 'Cancel'a bastı
+
         start_date = self.date_Baslangic.date().toPyDate()
         end_date = self.date_Bitis.date().toPyDate()
         current_template = self.templateSecCBox.currentText()
-        
+
         kayit_yolu = get_yeni_kayit_yolu("excel", start_date, end_date, self.target_table, current_template) 
-        
+
         if not kayit_yolu: 
             QMessageBox.critical(self, "Hata", "Kayıt yolu oluşturulamadı.")
             return 
-            
+
         self.show_loading_dialog("Excel dosyası oluşturuluyor... Lütfen bekleyin.")
         worker = Worker(task_run_excel, kayit_yolu, self.df.copy()) 
-        worker.signals.finished.connect(self._on_export_finished)
+
+        # 2. Yorumu ve Kayıt Yolunu Callback'e Gönder
+        # (functools.partial kullanarak)
+        worker.signals.finished.connect(
+            functools.partial(self._on_export_finished, kayit_yolu=kayit_yolu, comment_to_save=comment)
+        )
         worker.signals.error.connect(self._on_task_error)
         self.threadpool.start(worker)
 
     def export_pdf(self):
-        """Veriyi (self.df) PDF'e aktarır."""
+        """Veriyi (self.df) PDF'e aktarır ve yorum sorar."""
         if self.df.empty: 
             QMessageBox.warning(self, "Uyarı", "Dışa aktarılacak veri bulunamadı.")
             return
 
+        # 1. Yorumu Sor
+        comment, ok = QInputDialog.getMultiLineText(self, "Rapor Yorumu", 
+                                                    "Rapor için bir yorum ekleyin (opsiyonel):")
+        if not ok:
+            print("PDF'e aktarma iptal edildi.")
+            return 
+
         start_date = self.date_Baslangic.date().toPyDate()
         end_date = self.date_Bitis.date().toPyDate()
         current_template = self.templateSecCBox.currentText()
-        
+
         kayit_yolu = get_yeni_kayit_yolu("pdf", start_date, end_date, self.target_table, current_template) 
 
         if not kayit_yolu: 
@@ -548,19 +633,42 @@ class MainWindow(QMainWindow):
 
         self.show_loading_dialog("PDF dosyası oluşturuluyor... Lütfen bekleyin.")
         worker = Worker(task_run_pdf, kayit_yolu, self.df.copy())
-        worker.signals.finished.connect(self._on_export_finished)
+
+        # 2. Yorumu ve Kayıt Yolunu Callback'e Gönder
+        worker.signals.finished.connect(
+            functools.partial(self._on_export_finished, kayit_yolu=kayit_yolu, comment_to_save=comment)
+        )
         worker.signals.error.connect(self._on_task_error)
         self.threadpool.start(worker)
 
-    def _on_export_finished(self, kayit_yolu):
-        """(Callback) Excel/PDF kaydetme bittiğinde çalışır."""
+    def _on_export_finished(self, kayit_yolu, comment_to_save):
+        """
+        (Callback) Excel/PDF kaydetme bittiğinde çalışır.
+        'kayit_yolu' ve 'comment_to_save' parametreleri functools.partial ile gelir.
+        """
         self.close_loading_dialog()
         QMessageBox.information(self, "Başarılı", f"Dosya başarıyla kaydedildi:\n{kayit_yolu}")
-        if kayit_yolu.endswith(".xlsx"):
-            self._load_saved_report_dates() # Yeni Excel'i listeye ekle
-            
+
+        # --- YENİ ADIM 3: Yorumu Kaydet ---
+        if comment_to_save and comment_to_save.strip():
+            print(f"'{kayit_yolu}' için yorum kaydediliyor...")
+
+            # Yeni metadata yöneticimizi çağırıyoruz
+            # İleride 'user' kısmını dinamik hale getirebiliriz (örn: self.current_user)
+            save_report_comment(file_path=kayit_yolu, 
+                                comment=comment_to_save, 
+                                user="Admin") # Şimdilik "Admin" diyelim
+        else:
+            print("Kaydedilecek yorum girilmedi.")
+        # ---------------------------------
+
+        # Kaydedilen dosya Excel ise, 'Kaydedilmiş Raporlar' listesini yenile
+        if kayit_yolu and kayit_yolu.endswith(".xlsx"):
+            self._load_saved_report_dates()
+        
+                
     # --- Günlük Özet Aracı Fonksiyonları ---
-    
+        
     def open_daily_summary_dialog(self):
         """'Günlük Özet Raporu' menüsüne tıklandığında çalışır."""
         source_cols = [] 
@@ -644,6 +752,7 @@ class MainWindow(QMainWindow):
         self.currently_viewing_excel = None
         self.raw_df_from_excel = None
         self.db_engine = None
+        self.db_explorer.clear_tree()
         self.df = pd.DataFrame()
         self.update_connection_status()
 

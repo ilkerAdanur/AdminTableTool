@@ -51,6 +51,41 @@
       </property>
      </widget>
     </item>
+    
+    <item>
+     <widget class="QLabel" name="commentLabel">
+      <property name="maximumSize">
+       <size>
+        <width>16777215</width>
+        <height>80</height>
+       </size>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>10</pointsize>
+        <italic>true</italic>
+       </font>
+      </property>
+      <property name="styleSheet">
+       <string>background-color: rgb(240, 240, 240); 
+        border-radius: 5px; 
+        padding: 5px;
+        color: #333;</string>
+      </property>
+      <property name="text">
+       <string>Yorum alanı...</string>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+      </property>
+      <property name="wordWrap">
+       <bool>true</bool>
+      </property>
+      <property name="visible">
+       <bool>false</bool>
+      </property>
+     </widget>
+    </item>
     <item>
      <layout class="QHBoxLayout" name="horizontalLayout_Dates">
       <item>
@@ -261,6 +296,8 @@
     </widget>
     <addaction name="menuVeritaban_T_r_Se_iniz"/>
     <addaction name="actionVeritaban_n_Se"/>
+    <addaction name="separator"/>
+    <addaction name="actionVeritabani_Gezgini"/>
    </widget>
    <widget class="QMenu" name="menuAraclar">
     <property name="title">
@@ -277,7 +314,8 @@
    <addaction name="menuAna_Sayfa"/>
    <addaction name="menuAyarlar"/>
    <addaction name="menuVeritaban"/>
-   <addaction name="menuAraclar"/> <addaction name="menuProfil"/>
+   <addaction name="menuAraclar"/>
+   <addaction name="menuProfil"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <action name="actionVeritaban_n_Se">
@@ -330,7 +368,12 @@
     <string>Günlük Özet Raporu...</string>
    </property>
   </action>
-  </widget>
+  <action name="actionVeritabani_Gezgini">
+   <property name="text">
+    <string>Veritabanı Gezginini Göster</string>
+   </property>
+  </action>
+ </widget>
  <resources/>
  <connections/>
 </ui>

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>DbExplorerWindow</class>
+ <widget class="QWidget" name="DbExplorerWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>350</width>
+    <height>600</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Veritabanı Gezgini</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QTreeWidget" name="treeWidget_DB">
+     <property name="alternatingRowColors">
+      <bool>true</bool>
+     </property>
+     <property name="headerHidden">
+      <bool>true</bool> 
+     </property>
+     <column>
+      <property name="text">
+       <string>Veritabanı Yapısı</string>
+      </property>
+     </column>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
