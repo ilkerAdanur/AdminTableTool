@@ -12,249 +12,37 @@
   </property>
   <property name="minimumSize">
    <size>
-    <width>600</width>
-    <height>500</height>
+    <width>800</width>
+    <height>600</height>
    </size>
   </property>
   <property name="windowTitle">
-   <string>Dinamik Raporlama Aracı</string>
+   <string>Dinamik Raporlama Aracı (AdminTableTool)</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout_Main">
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
     <item>
-     <widget class="QLabel" name="veritabaniLabel">
-      <property name="minimumSize">
-       <size>
-        <width>400</width>
-        <height>0</height>
-       </size>
+     <widget class="QTabWidget" name="mainTabWidget">
+      <property name="currentIndex">
+       <number>-1</number>
       </property>
-      <property name="maximumSize">
-       <size>
-        <width>16777215</width>
-        <height>60</height>
-       </size>
-      </property>
-      <property name="font">
-       <font>
-        <pointsize>12</pointsize>
-       </font>
-      </property>
-      <property name="text">
-       <string>Veritabanı ve Tablo</string>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
-      </property>
-      <property name="wordWrap">
+      <property name="tabsClosable">
        <bool>true</bool>
       </property>
-     </widget>
-    </item>
-    
-    <item>
-     <widget class="QLabel" name="commentLabel">
-      <property name="maximumSize">
-       <size>
-        <width>16777215</width>
-        <height>80</height>
-       </size>
-      </property>
-      <property name="font">
-       <font>
-        <pointsize>10</pointsize>
-        <italic>true</italic>
-       </font>
-      </property>
-      <property name="styleSheet">
-       <string>background-color: rgb(240, 240, 240); 
-        border-radius: 5px; 
-        padding: 5px;
-        color: #333;</string>
-      </property>
-      <property name="text">
-       <string>Yorum alanı...</string>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
-      </property>
-      <property name="wordWrap">
+      <property name="movable">
        <bool>true</bool>
-      </property>
-      <property name="visible">
-       <bool>false</bool>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <layout class="QHBoxLayout" name="horizontalLayout_Dates">
-      <item>
-       <widget class="QLabel" name="labelBaslangic">
-        <property name="text">
-         <string>Başlangıç Tarihi:</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QDateEdit" name="date_Baslangic">
-        <property name="calendarPopup">
-         <bool>true</bool>
-        </property>
-        <property name="dateTime">
-         <datetime>
-          <hour>0</hour>
-          <minute>0</minute>
-          <second>0</second>
-          <year>2024</year>
-          <month>1</month>
-          <day>1</day>
-         </datetime>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="labelBitis">
-        <property name="text">
-         <string>Bitiş Tarihi:</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QDateEdit" name="date_Bitis">
-        <property name="calendarPopup">
-         <bool>true</bool>
-        </property>
-        <property name="dateTime">
-         <datetime>
-          <hour>0</hour>
-          <minute>0</minute>
-          <second>0</second>
-          <year>2024</year>
-          <month>1</month>
-          <day>31</day>
-         </datetime>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <spacer name="horizontalSpacer_Dates">
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>40</width>
-          <height>20</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
-     </layout>
-    </item>
-    <item>
-     <layout class="QHBoxLayout" name="horizontalLayout_Buttons">
-      <item>
-       <widget class="QPushButton" name="btn_ApplyTemplate">
-        <property name="text">
-         <string>Taslağı Uygula</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="btn_Excel">
-        <property name="text">
-         <string>Excel'e Aktar</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="btn_PDF">
-        <property name="text">
-         <string>PDF'e Aktar</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <spacer name="horizontalSpacer_Buttons">
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
-        </property>
-        <property name="sizeType">
-         <enum>QSizePolicy::Expanding</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>40</width>
-          <height>20</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
-      <item>
-       <widget class="QLabel" name="labelTaslak">
-        <property name="text">
-         <string>Rapor Taslağı:</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QComboBox" name="templateSecCBox">
-        <property name="minimumSize">
-         <size>
-          <width>150</width>
-          <height>0</height>
-         </size>
-        </property>
-        <property name="toolTip">
-         <string>Kullanılacak rapor taslağını seçin (Ayarlar menüsünden oluşturulur)</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QComboBox" name="tarihSecCBox">
-        <property name="toolTip">
-         <string>Kaydedilmiş Excel raporlarına göz atın</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="geriTarihButton">
-        <property name="text">
-         <string>&lt; Önceki</string>
-        </property>
-        <property name="toolTip">
-         <string>Seçili tarihteki önceki Excel raporunu göster</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="ileriTarihButton">
-        <property name="text">
-         <string>Sonraki &gt;</string>
-        </property>
-        <property name="toolTip">
-         <string>Seçili tarihteki sonraki Excel raporunu göster</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </item>
-    <item>
-     <widget class="QTableWidget" name="tbl_Veri">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="editTriggers">
-       <set>QAbstractItemView::NoEditTriggers</set>
-      </property>
-      <property name="alternatingRowColors">
-       <bool>true</bool>
-      </property>
-      <property name="selectionBehavior">
-       <enum>QAbstractItemView::SelectRows</enum>
       </property>
      </widget>
     </item>
@@ -269,10 +57,11 @@
      <height>26</height>
     </rect>
    </property>
-   <widget class="QMenu" name="menuAna_Sayfa">
+   <widget class="QMenu" name="menuDosya">
     <property name="title">
-     <string>Ana Sayfa</string>
+     <string>Dosya</string>
     </property>
+    <addaction name="actionYeni_Dosya"/>
    </widget>
    <widget class="QMenu" name="menuAyarlar">
     <property name="title">
@@ -290,9 +79,7 @@
      </property>
      <addaction name="actionMicrosoft_SQL"/>
      <addaction name="actionPostgreSQL"/>
-     <addaction name="actionOracle_Database"/>
      <addaction name="actionAccess_Database"/>
-     <addaction name="actionMySQL"/>
     </widget>
     <addaction name="menuVeritaban_T_r_Se_iniz"/>
     <addaction name="actionVeritaban_n_Se"/>
@@ -311,21 +98,34 @@
     </property>
     <addaction name="actionAdmin_Giri_i"/>
    </widget>
-   <addaction name="menuAna_Sayfa"/>
+   <addaction name="menuDosya"/>
    <addaction name="menuAyarlar"/>
    <addaction name="menuVeritaban"/>
    <addaction name="menuAraclar"/>
    <addaction name="menuProfil"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
+  
+  <widget class="QDockWidget" name="dbExplorerDock">
+   <property name="windowTitle">
+    <string>Veritabanı Gezgini</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>1</number> </attribute>
+   <widget class="QWidget" name="dbExplorerContents">
+    <layout class="QVBoxLayout" name="verticalLayout_Dock">
+     </layout>
+   </widget>
+  </widget>
+  
+  <action name="actionYeni_Dosya">
+   <property name="text">
+    <string>Yeni Dosya</string>
+   </property>
+  </action>
   <action name="actionVeritaban_n_Se">
    <property name="text">
     <string>Veritabanını Seç / Değiştir...</string>
-   </property>
-  </action>
-  <action name="actionSQL_Server">
-   <property name="text">
-    <string>SQL Server</string>
    </property>
   </action>
   <action name="actionMicrosoft_SQL">
@@ -336,11 +136,6 @@
   <action name="actionPostgreSQL">
    <property name="text">
     <string>PostgreSQL</string>
-   </property>
-  </action>
-  <action name="actionOracle_Database">
-   <property name="text">
-    <string>Oracle Database</string>
    </property>
   </action>
   <action name="actionAccess_Database">
@@ -370,7 +165,7 @@
   </action>
   <action name="actionVeritabani_Gezgini">
    <property name="text">
-    <string>Veritabanı Gezginini Göster</string>
+    <string>Veritabanı Gezgini</string>
    </property>
   </action>
  </widget>
