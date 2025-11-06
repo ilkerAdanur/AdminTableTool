@@ -431,3 +431,48 @@ class TemplateEditorDialog(QDialog):
         return getattr(self, "template_data", None)
 
 
+class NewFileDialog(QDialog):
+    """
+    Kullanıcıya 'Yeni Görsel Rapor' (tuval) veya 'Yeni Veri Tablosu' (tablo)
+    oluşturma seçeneklerini sunan basit bir diyalog.
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Yeni Dosya Oluştur")
+        self.setMinimumWidth(300)
+
+        # Seçilen dosya türünü saklamak için
+        self.selected_type = None # "designer" veya "table"
+
+        layout = QVBoxLayout(self)
+
+        label = QLabel("Oluşturmak istediğiniz dosya türünü seçin:")
+        layout.addWidget(label)
+
+        # 1. Görsel Tasarımcı (A4 Sayfası) Butonu
+        self.btn_designer = QPushButton("Yeni Görsel Rapor (Tasarımcı)")
+        self.btn_designer.setToolTip("Görsel, sürükle-bırak A4 tuvali oluşturur (Grafikler, Başlıklar vb. için).")
+        self.btn_designer.clicked.connect(self.select_designer)
+        layout.addWidget(self.btn_designer)
+
+        # 2. Veri Tablosu (Yeni İstek) Butonu
+        self.btn_table = QPushButton("Yeni Veri Tablosu (Dönüştürme)")
+        self.btn_table.setToolTip("Sütunları sürükleyip formüllerle birleştirmek için dinamik bir tablo oluşturur.")
+        self.btn_table.clicked.connect(self.select_table)
+        layout.addWidget(self.btn_table)
+
+        # 3. İptal Butonu
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+
+    def select_designer(self):
+        self.selected_type = "designer"
+        self.accept()
+
+    def select_table(self):
+        self.selected_type = "table"
+        self.accept()
+
+    def get_selected_type(self):
+        return self.selected_type

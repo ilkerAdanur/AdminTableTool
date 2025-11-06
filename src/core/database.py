@@ -160,3 +160,39 @@ def load_excel_file(tam_yol):
     df = pd.read_excel(tam_yol, engine=EXCEL_ENGINE)
     print(f"Çalışan iş parçacığı: Excel okuma bitti. {len(df)} satır bulundu.")
     return df
+def run_preview_query(config, table_name, column_name=None, limit=10):
+    """
+    Bir tablo veya sütunun ilk 'limit' satırını çeker.
+    column_name None ise, tüm sütunları (SELECT *) çeker.
+    """
+    print(f"Çalışan iş parçacığı: Önizleme sorgusu başlatıldı. Tablo: {table_name}, Sütun: {column_name}")
+
+    engine = create_db_engine(config)
+    db_type = config.get('type')
+
+    # Sütun adını ve tablo adını veritabanına göre formatla
+    select_col = ""
+    if db_type == 'access':
+        formatted_table_name = f"[{table_name}]"
+        select_col = f"[{column_name}]" if column_name else "*"
+    else: # SQL Server, PostgreSQL
+        if '.' in table_name:
+            schema, table = table_name.split('.', 1)
+            formatted_table_name = f'"{schema}"."{table}"'
+        else:
+            formatted_table_name = f'"{table_name}"'
+        select_col = f'"{column_name}"' if column_name else "*"
+
+    # Veritabanına göre LIMIT/TOP N sorgusunu oluştur
+    sql_query = ""
+    if db_type == 'access' or db_type == 'sql': # Access ve SQL Server
+        sql_query = f"SELECT TOP {limit} {select_col} FROM {formatted_table_name}"
+    elif db_type == 'postgres': # PostgreSQL
+        sql_query = f"SELECT {select_col} FROM {formatted_table_name} LIMIT {limit}"
+    else:
+        raise ValueError(f"Önizleme sorgusu için desteklenmeyen veritabanı türü: {db_type}")
+
+    df = pd.read_sql(sql_query, engine)
+
+    print(f"Çalışan iş parçacığı: Önizleme sorgusu bitti. {len(df)} satır bulundu.")
+    return df

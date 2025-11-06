@@ -80,6 +80,7 @@
      <addaction name="actionMicrosoft_SQL"/>
      <addaction name="actionPostgreSQL"/>
      <addaction name="actionAccess_Database"/>
+     <addaction name="actionMySQL"/>
     </widget>
     <addaction name="menuVeritaban_T_r_Se_iniz"/>
     <addaction name="actionVeritaban_n_Se"/>
@@ -91,6 +92,7 @@
      <string>Araçlar</string>
     </property>
     <addaction name="actionGunluk_Ozet_Raporu"/>
+    <addaction name="actionArac_Kutusu"/>
    </widget>
    <widget class="QMenu" name="menuProfil">
     <property name="title">
@@ -105,16 +107,28 @@
    <addaction name="menuProfil"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
-  
   <widget class="QDockWidget" name="dbExplorerDock">
    <property name="windowTitle">
     <string>Veritabanı Gezgini</string>
    </property>
    <attribute name="dockWidgetArea">
-    <number>1</number> </attribute>
+    <number>1</number>
+   </attribute>
    <widget class="QWidget" name="dbExplorerContents">
     <layout class="QVBoxLayout" name="verticalLayout_Dock">
-     </layout>
+     <property name="leftMargin">
+      <number>0</number>
+     </property>
+     <property name="topMargin">
+      <number>0</number>
+     </property>
+     <property name="rightMargin">
+      <number>0</number>
+     </property>
+     <property name="bottomMargin">
+      <number>0</number>
+     </property>
+    </layout>
    </widget>
   </widget>
   
@@ -166,6 +180,11 @@
   <action name="actionVeritabani_Gezgini">
    <property name="text">
     <string>Veritabanı Gezgini</string>
+   </property>
+  </action>
+  <action name="actionArac_Kutusu">
+   <property name="text">
+    <string>Araç Kutusunu Göster</string>
    </property>
   </action>
  </widget>

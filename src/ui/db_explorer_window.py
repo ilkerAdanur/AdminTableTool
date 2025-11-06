@@ -5,7 +5,9 @@ from PyQt6.uic import loadUi
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QTreeWidgetItem, QStyle, QAbstractItemView
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QMimeData
+
+
 
 class DbExplorerWindow(QWidget):
     # Kullanıcı bir tabloya çift tıkladığında bu sinyal tetiklenecek
@@ -23,6 +25,10 @@ class DbExplorerWindow(QWidget):
         self.treeWidget_DB.setDragEnabled(True) 
         self.treeWidget_DB.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly)
         
+        # QTreeWidget'a varsayılan mimeData yerine bizim fonksiyonlarımızı kullanmasını söyle
+        self.treeWidget_DB.mimeTypes = self.mimeTypes
+        self.treeWidget_DB.mimeData = self.mimeData
+
         # Başlık ayarları
         self.treeWidget_DB.setHeaderLabel("Veritabanı Yapısı") 
         self.treeWidget_DB.setHeaderHidden(False)
@@ -79,6 +85,31 @@ class DbExplorerWindow(QWidget):
                 columns_item.setText(0, "Columns (Could not read)")
 
         self.treeWidget_DB.expandAll()
+
+    def mimeTypes(self):
+        """Sadece 'text/plain' formatını desteklediğimizi belirtir."""
+        return ['text/plain']
+
+    def mimeData(self, items):
+        """
+        Sürükleme başladığında, Qt'nin hangi veriyi taşıyacağını belirler.
+        Varsayılan metin yerine UserRole'daki tam yolu (örn: "dbo.ogrenciler.ad") alırız.
+        """
+        mime_data = QMimeData()
+        text_data = ""
+
+        for item in items:
+            # Sadece sütunların (veya tabloların) sürüklenmesine izin ver
+            parent = item.parent()
+            if parent: # Bir ebeveyni varsa (Sütun veya Tablo olabilir)
+                # UserRole'da sakladığımız tam yolu (örn: "dbo.ogrenciler.ad") al
+                full_path = item.data(0, Qt.ItemDataRole.UserRole)
+                if full_path:
+                    text_data += f"{full_path}\n" # Birden fazla seçimi desteklemek için
+
+        mime_data.setText(text_data.strip())
+        print(f"Sürükleme başladı. Taşınan veri: {mime_data.text()}")
+        return mime_data
 
     def clear_tree(self):
         """Ağaç görünümünü temizler."""

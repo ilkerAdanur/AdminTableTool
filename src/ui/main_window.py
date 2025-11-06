@@ -15,12 +15,14 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QCloseEvent, QPainter # QPainter eklendi (Gerekebilir)
 from PyQt6.uic import loadUi 
 
+from .dynamic_table_tab import DynamicTableTab
 # --- Göreli UI Importları ---
-from .dialogs import ConnectionDialog, TemplateEditorDialog
+from .dialogs import ConnectionDialog, NewFileDialog, TemplateEditorDialog
 from .daily_summary_dialog import DailySummaryDialog
 from .db_explorer_window import DbExplorerWindow
 from .report_tab import ReportTabWidget
 from .report_designer import ReportDesignerWidget # <<< YENİ TASARIMCI SINIFI
+from .toolbox_widget import ToolboxWidget
 
 # --- Çekirdek (Core) ve Görev (Task) Importları ---
 from src.core.database import create_db_engine, inspect
@@ -69,31 +71,37 @@ class MainWindow(QMainWindow):
         self.mainTabWidget.tabCloseRequested.connect(self._close_tab)
 
     def _setup_docks(self):
-        """Veritabanı Gezgini'ni (.py) bulur ve .ui'daki dock'a yerleştirir."""
-        
-        # 1. Asıl Gezgin widget'ını EBEVEYNSİZ (parent=None) olarak oluştur
+        """Gezgin ve Araç Kutusu için Dock Widget'ları ayarlar."""
+
+        # --- 1. Veritabanı Gezgini Dock'u ---
         self.db_explorer = DbExplorerWindow(parent=None) 
-        
-        # 2. .ui dosyasından 'dbExplorerDock' adlı QDockWidget'ı bul
         try:
-            # self.dbExplorerDock, loadUi tarafından otomatik olarak oluşturulur.
-            # İçeriğini (widget'ını) bizim 'db_explorer'ımızla değiştiriyoruz.
             self.dbExplorerDock.setWidget(self.db_explorer)
-            
         except AttributeError as e:
-            # Bu hata, 'arayuz.ui' dosyasında 'dbExplorerDock' adında
-            # bir QDockWidget bulunamazsa meydana gelir.
-            print(f"HATA: 'arayuz.ui' dosyasında 'dbExplorerDock' QDockWidget'ı bulunamadı. {e}")
+            print(f"HATA: 'arayuz.ui' dosyasında 'dbExplorerDock' bulunamadı. {e}")
             self.dbExplorerDock = QDockWidget("Veritabanı Gezgini (Hata)", self)
             self.dbExplorerDock.setWidget(self.db_explorer)
             self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.dbExplorerDock)
+
+        # --- 2. YENİ: Araç Kutusu Dock'u ---
+        self.tools_dock = QDockWidget("Araç Kutusu", self)
+        self.tools_dock.setObjectName("toolsDock")
+        self.toolbox = ToolboxWidget(self) # Yeni sınıfımızı oluştur
+        self.tools_dock.setWidget(self.toolbox)
+
+        # Veritabanı Gezgini'nin altına, aynı sekmeye ekle (VS Code gibi)
+        self.tabifyDockWidget(self.dbExplorerDock, self.tools_dock)
+
+        # Varsayılan olarak Gezgin'i göster
+        self.dbExplorerDock.raise_()
+
 
     def _connect_signals(self):
         """Ana kabuğun sinyallerini bağlar."""
         
         # Dosya Menüsü
         try:
-            self.actionYeni_Dosya.triggered.connect(self.open_new_designer_tab)
+            self.actionYeni_Dosya.triggered.connect(self.open_new_file_dialog)
         except AttributeError as e:
             print(f"UYARI: 'actionYeni_Dosya' menü eylemi bulunamadı. {e}")
             
@@ -119,9 +127,11 @@ class MainWindow(QMainWindow):
         try:
             self.actionTaslak_Duzenle.triggered.connect(self.open_template_editor)
             self.actionGunluk_Ozet_Raporu.triggered.connect(self.open_daily_summary_dialog)
+            self.actionArac_Kutusu.triggered.connect(self.tools_dock.toggleViewAction().trigger)
         except AttributeError as e:
              print(f"UYARI: Ayarlar/Araçlar menü eylemleri kodla eşleşmiyor. {e}")
              
+       
         # Veritabanı Gezgini Sinyali (Çift Tıklama)
         self.db_explorer.table_activated.connect(self.create_new_report_tab)
     
@@ -135,21 +145,43 @@ class MainWindow(QMainWindow):
         self.mainTabWidget.removeTab(index)
 
     # --- Sekme Oluşturma Fonksiyonları ---
-    
-    def open_new_designer_tab(self):
-        """'Dosya > Yeni Dosya' tıklandığında yeni bir tasarımcı sekmesi açar."""
+
+    def open_new_file_dialog(self):
+        """
+        'Dosya > Yeni Dosya' tıklandığında çalışır.
+        Kullanıcıya 'Görsel Rapor' veya 'Veri Tablosu' seçtirir.
+        """
         if not self.db_config:
             QMessageBox.warning(self, "Bağlantı Gerekli", 
-                                "Lütfen önce bir veritabanına bağlanın. Tasarımcı, sürükle-bırak için bu bağlantıyı kullanacaktır.")
+                                "Yeni bir dosya oluşturmak için lütfen önce bir veritabanına bağlanın.")
             return
-            
-        print("Yeni 'Tasarımcı' sekmesi açılıyor...")
-        
-        new_designer_tab = ReportDesignerWidget(self) 
-        
-        tab_index = self.mainTabWidget.addTab(new_designer_tab, "Yeni Tasarım 1")
-        self.mainTabWidget.setCurrentIndex(tab_index)
-    
+
+        dialog = NewFileDialog(self)
+        if dialog.exec():
+            file_type = dialog.get_selected_type()
+
+            if file_type == "designer":
+                # Seçenek 1: Görsel Rapor (A4 Sayfası)
+                print("Yeni 'Tasarımcı' sekmesi açılıyor...")
+                new_tab = ReportDesignerWidget(self) 
+                tab_name = f"Yeni Tasarım {self.mainTabWidget.count() + 1}"
+
+            elif file_type == "table":
+                # Seçenek 2: Veri Tablosu (Dinamik)
+                print("Yeni 'Veri Tablosu' sekmesi açılıyor...")
+                new_tab = DynamicTableTab(self)
+                tab_name = f"Yeni Veri Tablosu {self.mainTabWidget.count() + 1}"
+
+            else:
+                return # Bir şey seçilmedi
+
+            # Yeni sekmeyi ekle ve ona geçiş yap
+            index = self.mainTabWidget.addTab(new_tab, tab_name)
+            self.mainTabWidget.setCurrentIndex(index)
+        else:
+            print("Yeni dosya oluşturma iptal edildi.")    
+
+
     def create_new_report_tab(self, table_name):
         """
         Veritabanı Gezgininden çift tıklama üzerine yeni bir veri raporu sekmesi oluşturur.

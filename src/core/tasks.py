@@ -7,7 +7,7 @@ uzun süreli görevleri (veri çekme, işleme) barındırır.
 
 import pandas as pd
 import traceback
-from .database import run_database_query, get_database_tables, load_excel_file, create_db_engine, inspect
+from .database import run_database_query, get_database_tables, load_excel_file, create_db_engine, inspect,run_preview_query
 from .template_manager import load_template
 from .data_processor import apply_template, process_daily_summary
 
@@ -144,5 +144,18 @@ def fetch_full_schema_task(config, engine, table_list):
 
     print(f"Çalışan iş parçacığı: Tam şema çekildi. {len(full_schema)} tablo bulundu.")
     return full_schema
+
+def fetch_preview_data_task(config, table_name, column_name, limit=10):
+    """
+    (Worker Görevi) run_preview_query için bir sarmalayıcı (wrapper)
+    """
+    try:
+        print(f"Worker: {table_name} için önizleme verisi çekiliyor...")
+        df = run_preview_query(config, table_name, column_name, limit)
+        return df
+    except Exception as e:
+        print(f"!!! HATA (fetch_preview_data_task içinde): {e}")
+        traceback.print_exc()
+        raise e
 
     
