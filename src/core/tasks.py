@@ -4,7 +4,12 @@
 Arka plan (Worker) iş parçacıklarında çalıştırılacak olan 
 uzun süreli görevleri (veri çekme, işleme) barındırır.
 """
-
+import traceback
+from .database import (
+    run_database_query, # <-- BU LAZIM
+    get_database_tables, load_excel_file, 
+    create_db_engine, inspect, run_preview_query
+)
 import pandas as pd
 import traceback
 from .database import run_database_query, get_database_tables, load_excel_file, create_db_engine, inspect,run_preview_query
@@ -158,4 +163,91 @@ def fetch_preview_data_task(config, table_name, column_name, limit=10):
         traceback.print_exc()
         raise e
 
+def run_dynamic_report_task(config, defined_columns, full_date_column, start_date, end_date):
+    """
+    (Worker Görevi) Yeni "Veri Tablosu" sekmesi için çalışır.
+    1. Gerekli ham sütunları çeker.
+    2. Pandas.eval() kullanarak formülleri uygular.
+    """
+    print("Çalışan iş parçacığı: Dinamik rapor görevi başlatıldı.")
     
+    if not defined_columns:
+        return pd.DataFrame() 
+
+    try:
+        # --- 1. Gerekli Ham Veriyi Topla ---
+        source_columns = set()
+        tables = set()
+        
+        for col_def in defined_columns:
+            if 'sources' in col_def:
+                for source in col_def['sources']:
+                    source_columns.add(source)
+                    tables.add(source.split('.')[0])
+        
+        if not tables:
+            raise ValueError("Formüllerde hiçbir kaynak sütun ('sources') bulunamadı.")
+            
+        if len(tables) > 1:
+            raise ValueError(f"Formüller birden fazla tablo içeremez (henüz). Bulunanlar: {tables}")
+        
+        table_name = list(tables)[0] 
+        base_columns = [c.split('.')[-1] for c in source_columns]
+        
+        if not full_date_column:
+             raise ValueError("Birincil tarih sütunu seçilmedi.")
+             
+        date_col_table, date_col_base = full_date_column.split('.', 1)
+        
+        if date_col_table != table_name:
+            raise ValueError(f"Tarih sütunu ({date_col_table}), formül sütunlarıyla ({table_name}) aynı tabloda olmalıdır.")
+        
+        base_columns.append(date_col_base)
+        
+        # --- 2. Veritabanından Ham Veriyi Çek ---
+        
+        # --- HATA DÜZELTMESİ BURADA ---
+        # 'table_name=table_name' yerine 'target_table=table_name' kullanılıyor
+        raw_df = run_database_query(
+            config,
+            target_table=table_name, 
+            date_column_name=date_col_base,
+            baslangic_tarihi=start_date, # Argüman adlarını da eşleştirelim
+            bitis_tarihi=end_date,       # Argüman adlarını da eşleştirelim
+            columns_to_select=list(set(base_columns))
+        )
+        # --- DÜZELTME SONU ---
+        
+        if raw_df.empty:
+            print("Çalışan iş parçacığı: Seçilen tarih aralığında ham veri bulunamadı.")
+            return pd.DataFrame(columns=[c['name'] for c in defined_columns])
+
+        # --- 3. Formülleri Pandas ile İşle ---
+        final_df = pd.DataFrame()
+        
+        for col_def in defined_columns:
+            col_name = col_def['name']
+            formula = col_def['formula']
+            sources = col_def['sources']
+            
+            parsed_formula = formula
+            for src in sources:
+                base_col = src.split('.')[-1]
+                if base_col not in raw_df.columns:
+                    raise ValueError(f"Formül hatası: '{base_col}' sütunu veritabanından çekilemedi.")
+                parsed_formula = parsed_formula.replace(f'[{src}]', f'`{base_col}`')
+            
+            try:
+                final_df[col_name] = raw_df.eval(parsed_formula)
+            except Exception as e:
+                print(f"Formül hatası ({col_name}): {e}")
+                final_df[col_name] = f"Formül Hatası: {e}"
+        
+        print("Çalışan iş parçacığı: Dinamik rapor tamamlandı.")
+        return final_df
+
+    except Exception as e:
+        print(f"!!! HATA (run_dynamic_report_task içinde): {e}")
+        traceback.print_exc()
+        raise e
+ 

@@ -8,24 +8,23 @@ from datetime import datetime
 
 from PyQt6.QtCore import QRunnable, QThreadPool, QObject, pyqtSignal, Qt, QDate
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QTableWidgetItem, 
+    QApplication, QMainWindow, QWidget, QTableWidgetItem, QDialog,
     QMessageBox, QProgressDialog, 
-    QFileDialog, QInputDialog, QLabel, QDockWidget,QDialog
+    QFileDialog, QInputDialog, QLabel, QDockWidget
 )
-from PyQt6.QtGui import QCloseEvent, QPainter # QPainter eklendi (Gerekebilir)
+from PyQt6.QtGui import QCloseEvent, QPainter 
 from PyQt6.uic import loadUi 
 
-from .dynamic_table_tab import DynamicTableTab
 # --- Göreli UI Importları ---
-from .dialogs import ConnectionDialog, NewFileDialog, TemplateEditorDialog
+from .dialogs import ConnectionDialog, TemplateEditorDialog, NewFileDialog
 from .daily_summary_dialog import DailySummaryDialog
 from .db_explorer_window import DbExplorerWindow
 from .report_tab import ReportTabWidget
-from .report_designer import ReportDesignerWidget # <<< YENİ TASARIMCI SINIFI
-from .toolbox_widget import ToolboxWidget
+from .report_designer import ReportDesignerWidget
+from .dynamic_table_tab import DynamicTableTab 
 
 # --- Çekirdek (Core) ve Görev (Task) Importları ---
-from src.core.database import create_db_engine, inspect
+from src.core.database import create_db_engine, inspect 
 from src.core.tasks import (
     get_column_names_task, run_summary_task,
     get_tables_task, fetch_full_schema_task
@@ -50,10 +49,10 @@ class MainWindow(QMainWindow):
              QMessageBox.critical(self, "UI Yükleme Hatası", f"'arayuz.ui' yüklenemedi: {e}")
              sys.exit()
 
-        # --- Durum Değişkenleri ---
+        # --- Durum Değişkenleri (Sadece bağlantı) ---
         self.db_config = {}
         self.db_engine = None     
-        self.full_schema_data = {}
+        self.full_schema_data = {} # Bağlı DB'nin tam şeması
         
         self.threadpool = QThreadPool()
         print(f"Multithreading için {self.threadpool.maxThreadCount()} adet iş parçacığı mevcut.")
@@ -62,50 +61,43 @@ class MainWindow(QMainWindow):
         self.status_light = QLabel()
         self.statusbar.addPermanentWidget(self.status_light)
         
-        # --- Bileşenleri Oluştur ve Yerleştir ---
         self._setup_docks()
         self._connect_signals()
 
-        # --- Başlangıç Ayarları ---
         self.update_connection_status("Bağlı Değil", is_connected=False)
         self.mainTabWidget.tabCloseRequested.connect(self._close_tab)
 
     def _setup_docks(self):
-        """Gezgin ve Araç Kutusu için Dock Widget'ları ayarlar."""
-
-        # --- 1. Veritabanı Gezgini Dock'u ---
+        """Veritabanı Gezgini'ni (.py) bulur ve .ui'daki dock'a yerleştirir."""
         self.db_explorer = DbExplorerWindow(parent=None) 
         try:
             self.dbExplorerDock.setWidget(self.db_explorer)
         except AttributeError as e:
-            print(f"HATA: 'arayuz.ui' dosyasında 'dbExplorerDock' bulunamadı. {e}")
+            print(f"HATA: 'arayuz.ui' dosyasında 'dbExplorerDock' QDockWidget'ı bulunamadı. {e}")
             self.dbExplorerDock = QDockWidget("Veritabanı Gezgini (Hata)", self)
             self.dbExplorerDock.setWidget(self.db_explorer)
             self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.dbExplorerDock)
-
-        # --- 2. YENİ: Araç Kutusu Dock'u ---
-        self.tools_dock = QDockWidget("Araç Kutusu", self)
-        self.tools_dock.setObjectName("toolsDock")
-        self.toolbox = ToolboxWidget(self) # Yeni sınıfımızı oluştur
-        self.tools_dock.setWidget(self.toolbox)
-
-        # Veritabanı Gezgini'nin altına, aynı sekmeye ekle (VS Code gibi)
-        self.tabifyDockWidget(self.dbExplorerDock, self.tools_dock)
-
-        # Varsayılan olarak Gezgin'i göster
-        self.dbExplorerDock.raise_()
-
+            
+        try:
+            self.tools_dock = QDockWidget("Araç Kutusu", self)
+            self.tools_dock.setObjectName("toolsDock")
+            from .toolbox_widget import ToolboxWidget
+            self.toolbox = ToolboxWidget(self) 
+            self.tools_dock.setWidget(self.toolbox)
+            self.tabifyDockWidget(self.dbExplorerDock, self.tools_dock)
+            self.dbExplorerDock.raise_()
+        except ImportError:
+            print("UYARI: toolbox_widget.py bulunamadı.")
+        except AttributeError as e:
+             print(f"HATA: Araç kutusu dock'u kurulamadı: {e}")
 
     def _connect_signals(self):
         """Ana kabuğun sinyallerini bağlar."""
         
-        # Dosya Menüsü
         try:
             self.actionYeni_Dosya.triggered.connect(self.open_new_file_dialog)
-        except AttributeError as e:
-            print(f"UYARI: 'actionYeni_Dosya' menü eylemi bulunamadı. {e}")
+        except AttributeError: pass
             
-        # Veritabanı Menüsü
         try:
             self.actionVeritaban_n_Se.triggered.connect(self.open_connection_settings)
             self.actionAccess_Database.triggered.connect(
@@ -117,40 +109,28 @@ class MainWindow(QMainWindow):
             self.actionPostgreSQL.triggered.connect(
                 functools.partial(self.set_database_type, "postgres")
             )
-            # Dock'un kendi "göster/gizle" eylemini menüye bağla
             self.actionVeritabani_Gezgini.triggered.connect(self.dbExplorerDock.toggleViewAction().trigger)
-            
-        except AttributeError as e:
-            print(f"UYARI: Veritabanı menü eylemleri kodla eşleşmiyor. {e}")
+        except AttributeError: pass
 
-        # Ayarlar & Araçlar Menüleri
         try:
             self.actionTaslak_Duzenle.triggered.connect(self.open_template_editor)
             self.actionGunluk_Ozet_Raporu.triggered.connect(self.open_daily_summary_dialog)
-            self.actionArac_Kutusu.triggered.connect(self.tools_dock.toggleViewAction().trigger)
-        except AttributeError as e:
-             print(f"UYARI: Ayarlar/Araçlar menü eylemleri kodla eşleşmiyor. {e}")
+            if hasattr(self, 'tools_dock'): # tools_dock oluşturulduysa bağla
+                self.actionArac_Kutusu.triggered.connect(self.tools_dock.toggleViewAction().trigger)
+        except AttributeError: pass
              
-       
-        # Veritabanı Gezgini Sinyali (Çift Tıklama)
         self.db_explorer.table_activated.connect(self.create_new_report_tab)
-    
-    
-    
+
     def _close_tab(self, index):
-        """Bir sekme üzerindeki 'X' butonuna basıldığında çalışır."""
         widget = self.mainTabWidget.widget(index)
         if widget:
             widget.deleteLater()
         self.mainTabWidget.removeTab(index)
 
     # --- Sekme Oluşturma Fonksiyonları ---
-
+    
     def open_new_file_dialog(self):
-        """
-        'Dosya > Yeni Dosya' tıklandığında çalışır.
-        Kullanıcıya 'Görsel Rapor' veya 'Veri Tablosu' seçtirir.
-        """
+        """'Dosya > Yeni Dosya' tıklandığında çalışır."""
         if not self.db_config:
             QMessageBox.warning(self, "Bağlantı Gerekli", 
                                 "Yeni bir dosya oluşturmak için lütfen önce bir veritabanına bağlanın.")
@@ -159,43 +139,34 @@ class MainWindow(QMainWindow):
         dialog = NewFileDialog(self)
         if dialog.exec():
             file_type = dialog.get_selected_type()
-
+            
             if file_type == "designer":
-                # Seçenek 1: Görsel Rapor (A4 Sayfası)
-                print("Yeni 'Tasarımcı' sekmesi açılıyor...")
                 new_tab = ReportDesignerWidget(self) 
                 tab_name = f"Yeni Tasarım {self.mainTabWidget.count() + 1}"
-
+                
             elif file_type == "table":
-                # Seçenek 2: Veri Tablosu (Dinamik)
-                print("Yeni 'Veri Tablosu' sekmesi açılıyor...")
                 new_tab = DynamicTableTab(self)
                 tab_name = f"Yeni Veri Tablosu {self.mainTabWidget.count() + 1}"
-
             else:
-                return # Bir şey seçilmedi
+                return 
 
-            # Yeni sekmeyi ekle ve ona geçiş yap
             index = self.mainTabWidget.addTab(new_tab, tab_name)
             self.mainTabWidget.setCurrentIndex(index)
         else:
-            print("Yeni dosya oluşturma iptal edildi.")    
-
-
+            print("Yeni dosya oluşturma iptal edildi.")
+    
     def create_new_report_tab(self, table_name):
-        """
-        Veritabanı Gezgininden çift tıklama üzerine yeni bir veri raporu sekmesi oluşturur.
-        """
+        """Veritabanı Gezgininden çift tıklama üzerine 'Eski' rapor sekmesini oluşturur."""
+        
         if table_name not in self.full_schema_data:
              QMessageBox.warning(self, "Hata", f"'{table_name}' için şema verisi bulunamadı.")
              return
              
-        # Zaten açık olan bir sekme var mı?
         for i in range(self.mainTabWidget.count()):
             tab = self.mainTabWidget.widget(i)
             if isinstance(tab, ReportTabWidget) and tab.target_table == table_name:
                 self.mainTabWidget.setCurrentIndex(i)
-                return # Varsa o sekmeye geç, yenisini açma
+                return 
 
         column_names = self.full_schema_data.get(table_name, [])
         date_col, ok = QInputDialog.getItem(
@@ -209,14 +180,16 @@ class MainWindow(QMainWindow):
 
         new_report_tab = ReportTabWidget(
             main_window=self, 
+            db_config=self.db_config,
             target_table=table_name,
-            target_date_column=date_col
+            target_date_column=date_col,
+            full_schema_data=self.full_schema_data
         )
         
         index = self.mainTabWidget.addTab(new_report_tab, table_name)
         self.mainTabWidget.setCurrentIndex(index)
 
-    # --- Veritabanı Bağlantı Akışı (Ana Pencere Yönetir) ---
+    # --- Veritabanı Bağlantı Akışı ---
 
     def set_database_type(self, db_type):
         print(f"Veritabanı türü '{db_type}' olarak ayarlandı.")
@@ -298,10 +271,8 @@ class MainWindow(QMainWindow):
         current_tab = self.mainTabWidget.currentWidget()
         source_cols = []
         if isinstance(current_tab, ReportTabWidget):
-            # Aktif sekmenin kaynak sütunlarını al
             source_cols = current_tab.full_schema_data.get(current_tab.target_table, [])
         elif self.full_schema_data:
-             # Aktif sekme yoksa, son bağlanan DB'deki tüm sütunları topla
              all_columns = set()
              for cols in self.full_schema_data.values():
                  all_columns.update(cols)
@@ -354,8 +325,6 @@ class MainWindow(QMainWindow):
         date_column_name = settings["date_col"]
         data_column_name = settings["data_col"]
 
-        # TODO: Hangi tablonun kullanılacağını bulmamız lazım.
-        # Şimdilik, o sütunu içeren ilk tabloyu bul (basit varsayım)
         target_table_for_summary = None
         for table, cols in self.full_schema_data.items():
              if date_column_name in cols and data_column_name in cols:

@@ -3,51 +3,48 @@
 import os
 import pandas as pd
 import functools
+import re
 from datetime import datetime
 
 from PyQt6.uic import loadUi
 from PyQt6.QtWidgets import (
     QWidget, QTableWidgetItem, QMessageBox, QInputDialog, 
-    QLabel, QDialog, QHeaderView
+    QLabel, QDialog, QHeaderView, QTableWidget, QApplication,QVBoxLayout,QDialog
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QDate
 
-# Çekirdek (Core) ve Görev (Task) importları
 from src.core.database import load_excel_file
 from src.core.file_exporter import get_yeni_kayit_yolu, task_run_excel, task_run_pdf
 from src.core.data_processor import apply_template
 from src.core.template_manager import load_template, get_available_templates
+from src.core.metadata_manager import save_report_comment, load_report_comments
 from src.core.report_manager import get_saved_report_dates
 from src.core.tasks import fetch_and_apply_task
 from src.threading.workers import Worker
 
 def natural_sort_key(s):
-    # Bu dosyada da sıralama gerektiği için ekliyoruz
-    import re
     return [int(c) if c.isdigit() else c.lower() for c in re.split('([0-9]+)', s)]
 
 class ReportTabWidget(QWidget):
     """
-    Bir rapor sekmesini temsil eden ana widget.
-    Kendi veritabanı yapılandırmasını, taslaklarını ve tablosunu yönetir.
+    'Eski' tip (Veri Gezgininden çift tıklayarak açılan)
+    rapor sekmesini temsil eden widget.
     """
-    def __init__(self, main_window, target_table, target_date_column):
-        super().__init__(main_window) # Ebeveyn olarak main_window
+    def __init__(self, main_window, db_config, target_table, target_date_column, full_schema_data):
+        super().__init__(main_window)
         
-        # Ana pencereden gelen bilgileri sakla
-        self.main_window = main_window # Ana threadpool'a ve progress bar'a erişim için
-        self.db_config = main_window.db_config
+        self.main_window = main_window 
+        self.db_config = db_config
         self.target_table = target_table
         self.target_date_column = target_date_column
+        self.full_schema_data = full_schema_data
         
-        # Bu sekmeye özel durum değişkenleri
         self.df = pd.DataFrame() 
         self.raw_df_from_excel = None
         self.currently_viewing_excel = None 
         self.report_history_files = [] 
         self.current_report_index = 0   
         
-        # --- UI Dosyasını Yükle ---
         try:
             current_dir = os.path.dirname(os.path.abspath(__file__))
             ui_file_path = os.path.join(current_dir, 'report_tab.ui')
@@ -57,7 +54,6 @@ class ReportTabWidget(QWidget):
             self.layout().addWidget(QLabel(f"HATA: report_tab.ui yüklenemedi: {e}"))
             return
         
-        # --- Başlangıç Ayarları ---
         self._connect_signals()
         self.update_tab_label() 
         self._load_available_templates()
@@ -69,7 +65,6 @@ class ReportTabWidget(QWidget):
         self.tbl_Veri.setSortingEnabled(True)
 
     def _connect_signals(self):
-        """Bu sekmenin içindeki butonları fonksiyonlara bağlar."""
         self.btn_ApplyTemplate.clicked.connect(self.apply_selected_template)
         self.btn_Excel.clicked.connect(self.export_excel)
         self.btn_PDF.clicked.connect(self.export_pdf)
@@ -81,7 +76,6 @@ class ReportTabWidget(QWidget):
         self.templateSecCBox.currentIndexChanged.connect(self._on_template_selection_changed)
 
     def update_tab_label(self):
-        """Bu sekmenin üst etiketini (veritabaniLabel) günceller."""
         db_type = self.db_config.get('type', 'Bilinmiyor')
         label_parts = [f"Sistem: {db_type.capitalize()}"]
 
@@ -103,8 +97,6 @@ class ReportTabWidget(QWidget):
         self.veritabaniLabel.setText(label_text)
         self.veritabaniLabel.setToolTip(label_text)
 
-    # --- Ana İş Akışı (MainWindow'dan Taşındı) ---
-    
     def apply_selected_template(self):
         self.currently_viewing_excel = None
         self.raw_df_from_excel = None 
@@ -131,7 +123,7 @@ class ReportTabWidget(QWidget):
                         self.target_date_column)
                         
         worker.signals.finished.connect(self._on_query_or_template_applied) 
-        worker.signals.error.connect(self.main_window._on_task_error) # Ana pencerenin hata işleyicisini kullan
+        worker.signals.error.connect(self.main_window._on_task_error)
         self.main_window.threadpool.start(worker)
 
     def _on_query_or_template_applied(self, processed_df):
@@ -140,15 +132,12 @@ class ReportTabWidget(QWidget):
         self.df = processed_df 
         self._populate_table(self.df) 
         
-        # Butonları ayarla
         self.btn_Excel.setEnabled(not self.df.empty)
         self.btn_PDF.setEnabled(not self.df.empty)
         self.main_window.statusbar.clearMessage() 
 
         self.main_window.close_loading_dialog() 
         print(f"Sekme [{self.target_table}]: İşlem tamamlandı.")
-
-    # --- Dışa Aktarma (MainWindow'dan Taşındı) ---
     
     def export_excel(self):
         if self.df.empty: 
@@ -156,7 +145,7 @@ class ReportTabWidget(QWidget):
             return
             
         comment, ok = QInputDialog.getMultiLineText(self, "Rapor Yorumu", 
-                                                    "Rapor için bir yorum ekleyin (opsiyone l):")
+                                                    "Rapor için bir yorum ekleyin (opsiyonel):")
         if not ok:
             return 
 
@@ -211,15 +200,10 @@ class ReportTabWidget(QWidget):
         QMessageBox.information(self, "Başarılı", f"Dosya başarıyla kaydedildi:\n{kayit_yolu}")
         
         if comment_to_save and comment_to_save.strip():
-            print(f"'{kayit_yolu}' için yorum kaydediliyor...")
-            save_report_comment(file_path=kayit_yolu, 
-                                comment=comment_to_save, 
-                                user="Admin")
+            save_report_comment(file_path=kayit_yolu, comment=comment_to_save, user="Admin")
         
         if kayit_yolu and kayit_yolu.endswith(".xlsx"):
-            self._load_saved_report_dates() # Bu sekmenin kendi listesini yenile
-
-    # --- Taslak Yönetimi (MainWindow'dan Taşındı) ---
+            self._load_saved_report_dates() 
 
     def _load_available_templates(self):
         self.templateSecCBox.blockSignals(True)
@@ -242,7 +226,6 @@ class ReportTabWidget(QWidget):
         selected_template_name = self.templateSecCBox.currentText()
         selected_template_data = self.templateSecCBox.currentData()
         is_raw_data_selected = (selected_template_data is None)
-
         processed_df = None
 
         if is_raw_data_selected:
@@ -265,8 +248,6 @@ class ReportTabWidget(QWidget):
         self._populate_table(self.df)
         self.btn_Excel.setEnabled(not self.df.empty)
         self.btn_PDF.setEnabled(not self.df.empty)
-
-    # --- Rapor Geçmişi (MainWindow'dan Taşındı) ---
 
     def _load_saved_report_dates(self):
         self.tarihSecCBox.blockSignals(True)

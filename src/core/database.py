@@ -107,19 +107,34 @@ def get_database_tables(config):
     print(f"Çalışan iş parçacığı: Bulunan tablolar: {all_tables}")
     return all_tables, engine
 
-def run_database_query(config, target_table, baslangic_tarihi, bitis_tarihi, date_column_name):
-    """(Worker Görevi) Veritabanında tarih aralığı sorgusu çalıştırır."""
+def run_database_query(config, target_table, baslangic_tarihi, bitis_tarihi, date_column_name, columns_to_select=None):
+    """
+    (Worker Görevi) Veritabanında tarih aralığı sorgusu çalıştırır.
+    columns_to_select None ise TÜM sütunları (*) çeker.
+    """
     
     print(f"Çalışan iş parçacığı: Sorgulama başlatıldı. Tablo: {target_table}, Tarih Sütunu: {date_column_name}")
     
     engine = create_db_engine(config)
     db_type = config.get('type')
     
+    # --- YENİ SÜTUN SEÇME MANTIĞI ---
+    columns_to_select_str = "*"
+    if columns_to_select:
+        # Gelen liste ['col1', 'col2'] ise -> "[col1], [col2]" (veya "col1", "col2") yap
+        if db_type == 'access':
+             formatted_cols = [f"[{col}]" for col in columns_to_select]
+        else:
+             formatted_cols = [f'"{col}"' for col in columns_to_select]
+        columns_to_select_str = ", ".join(formatted_cols)
+    # -------------------------------
+    
     if db_type == 'access':
         # Access: [Tablo] [Sütun] ve ? parametre stili
         formatted_table_name = f"[{target_table}]"
         formatted_date_column = f"[{date_column_name}]" 
-        sql_query = f"SELECT * FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN ? AND ? ORDER BY {formatted_date_column}"
+        # SELECT * yerine SELECT columns_to_select_str kullanıldı
+        sql_query = f"SELECT {columns_to_select_str} FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN ? AND ? ORDER BY {formatted_date_column}"
         params = (baslangic_tarihi, bitis_tarihi)
         
     elif db_type == 'sql':
@@ -131,7 +146,8 @@ def run_database_query(config, target_table, baslangic_tarihi, bitis_tarihi, dat
             formatted_table_name = f'"{target_table}"' 
             
         formatted_date_column = f'"{date_column_name}"' 
-        sql_query = f"SELECT * FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN ? AND ? ORDER BY {formatted_date_column}"
+        # SELECT * yerine SELECT columns_to_select_str kullanıldı
+        sql_query = f"SELECT {columns_to_select_str} FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN ? AND ? ORDER BY {formatted_date_column}"
         params = (baslangic_tarihi, bitis_tarihi)
         
     elif db_type == 'postgres':
@@ -143,7 +159,8 @@ def run_database_query(config, target_table, baslangic_tarihi, bitis_tarihi, dat
             formatted_table_name = f'"{target_table}"'
             
         formatted_date_column = f'"{date_column_name}"' 
-        sql_query = f"SELECT * FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN %(baslangic)s AND %(bitis)s ORDER BY {formatted_date_column}"
+        # SELECT * yerine SELECT columns_to_select_str kullanıldı
+        sql_query = f"SELECT {columns_to_select_str} FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN %(baslangic)s AND %(bitis)s ORDER BY {formatted_date_column}"
         params = {"baslangic": baslangic_tarihi, "bitis": bitis_tarihi}
         
     else:
@@ -196,3 +213,29 @@ def run_preview_query(config, table_name, column_name=None, limit=10):
 
     print(f"Çalışan iş parçacığı: Önizleme sorgusu bitti. {len(df)} satır bulundu.")
     return df
+
+def build_sql_query(db_type, table_name, date_column_name, columns_to_select_str="*"):
+    """Veritabanı türüne göre SQL sorgu metnini oluşturur."""
+
+    # 'access' için TOP N (sorgunun başında)
+    if db_type == 'access':
+        return (
+            f"SELECT {columns_to_select_str} FROM {table_name} "
+            f"WHERE {date_column_name} >= ? AND {date_column_name} <= ?"
+        )
+
+    # 'sql' (SQL Server) için TOP N (sorgunun başında)
+    elif db_type == 'sql':
+        return (
+            f"SELECT {columns_to_select_str} FROM {table_name} "
+            f"WHERE {date_column_name} >= ? AND {date_column_name} <= ?"
+        )
+
+    # 'postgres' için LIMIT (sorgunun sonunda)
+    elif db_type == 'postgres':
+         return (
+            f"SELECT {columns_to_select_str} FROM {table_name} "
+            f"WHERE {date_column_name} >= %s AND {date_column_name} <= %s"
+        )
+    else:
+        raise ValueError(f"Desteklenmeyen veritabanı türü: {db_type}")
