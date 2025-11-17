@@ -1,12 +1,11 @@
 # src/core/tasks.py
-
 """
 Arka plan (Worker) iş parçacıklarında çalıştırılacak olan 
 uzun süreli görevleri (veri çekme, işleme) barındırır.
 """
 import traceback
 from .database import (
-    run_database_query, # <-- BU LAZIM
+    run_database_query, 
     get_database_tables, load_excel_file, 
     create_db_engine, inspect, run_preview_query
 )
@@ -163,91 +162,198 @@ def fetch_preview_data_task(config, table_name, column_name, limit=10):
         traceback.print_exc()
         raise e
 
-def run_dynamic_report_task(config, defined_columns, full_date_column, start_date, end_date):
+def run_dynamic_report_task(config, defined_columns, full_date_column, start_date, end_date, agg_type_str="Ham Veri (Grup Yok)"):
     """
     (Worker Görevi) Yeni "Veri Tablosu" sekmesi için çalışır.
-    1. Gerekli ham sütunları çeker.
-    2. Pandas.eval() kullanarak formülleri uygular.
+    (GÜNCELLENMİŞ MANTIK: Önce özetler, sonra formül uygular)
     """
-    print("Çalışan iş parçacığı: Dinamik rapor görevi başlatıldı.")
+    print(f"Çalışan iş parçacığı: Dinamik rapor görevi başlatıldı. İşlem: {agg_type_str}")
     
     if not defined_columns:
         return pd.DataFrame() 
 
     try:
-        # --- 1. Gerekli Ham Veriyi Topla ---
-        source_columns = set()
-        tables = set()
+        # --- 1. Gerekli Ham Sütunları ve Formülleri Ayır ---
+        source_columns_full = set() # Tam ad (örn: "DEBILER.H_DEBI1")
+        source_columns_base = set() # Temel ad (örn: "H_DEBI1")
+        formula_definitions = []    # (col_name, formula, agg_str)
         
+        # 'defined_columns' listesini (argüman olarak geldi) tara
         for col_def in defined_columns:
-            if 'sources' in col_def:
-                for source in col_def['sources']:
-                    source_columns.add(source)
-                    tables.add(source.split('.')[0])
-        
-        if not tables:
-            raise ValueError("Formüllerde hiçbir kaynak sütun ('sources') bulunamadı.")
+            col_name = col_def['name']
+            formula = col_def['formula']
+            agg_str = col_def.get('agg', 'Yok (Özette Gösterme)')
             
-        if len(tables) > 1:
-            raise ValueError(f"Formüller birden fazla tablo içeremez (henüz). Bulunanlar: {tables}")
-        
-        table_name = list(tables)[0] 
-        base_columns = [c.split('.')[-1] for c in source_columns]
-        
+            # Formülü [DEBILER.H_DEBI1] -> `H_DEBI1` (temel ad) formatına çevir
+            parsed_formula = formula
+            is_simple_source = True # Sadece tek bir [Kaynak] içeriyorsa
+            
+            if 'sources' not in col_def:
+                 raise ValueError(f"'{col_name}' sütunu için 'sources' listesi bulunamadı.")
+                 
+            if len(col_def['sources']) > 1 or any(op in formula for op in ['+', '-', '*', '/']):
+                is_simple_source = False
+
+            for src in col_def['sources']:
+                base_col = src.split('.')[-1]
+                source_columns_full.add(src)
+                source_columns_base.add(base_col)
+                # pandas.eval() için ` ` (backtick) kullan
+                parsed_formula = parsed_formula.replace(f'[{src}]', f'`{base_col}`')
+
+            # Eğer bu bir formülse (örn: `H_DEBI1` + `H_DEBI3`), listeye ekle
+            if not is_simple_source:
+                 formula_definitions.append((col_name, parsed_formula, agg_str))
+            
         if not full_date_column:
              raise ValueError("Birincil tarih sütunu seçilmedi.")
              
         date_col_table, date_col_base = full_date_column.split('.', 1)
+        source_columns_base.add(date_col_base) # Tarih sütununu da ekle
+        source_columns_base.add("SAAT") # Access için SAAT sütununu da ekle
         
-        if date_col_table != table_name:
-            raise ValueError(f"Tarih sütunu ({date_col_table}), formül sütunlarıyla ({table_name}) aynı tabloda olmalıdır.")
-        
-        base_columns.append(date_col_base)
-        
-        # --- 2. Veritabanından Ham Veriyi Çek ---
-        
-        # --- HATA DÜZELTMESİ BURADA ---
-        # 'table_name=table_name' yerine 'target_table=table_name' kullanılıyor
+        # Hangi tablo(lar)dan veri çekeceğimizi bul
+        tables = set(c.split('.')[0] for c in source_columns_full)
+        if not tables:
+             raise ValueError("Formüllerde hiçbir kaynak tablo bulunamadı.")
+        if len(tables) > 1:
+            raise ValueError(f"Formüller birden fazla tablo içeremez (henüz). Bulunanlar: {tables}")
+        table_name = list(tables)[0]
+
+        # --- 2. Veritabanından SADECE Ham Sütunları Çek ---
+        print(f"Ham veri çekiliyor. Sütunlar: {list(source_columns_base)}")
         raw_df = run_database_query(
             config,
             target_table=table_name, 
             date_column_name=date_col_base,
-            baslangic_tarihi=start_date, # Argüman adlarını da eşleştirelim
-            bitis_tarihi=end_date,       # Argüman adlarını da eşleştirelim
-            columns_to_select=list(set(base_columns))
+            baslangic_tarihi=start_date,
+            bitis_tarihi=end_date,      
+            columns_to_select=list(set(source_columns_base)) 
         )
-        # --- DÜZELTME SONU ---
         
         if raw_df.empty:
             print("Çalışan iş parçacığı: Seçilen tarih aralığında ham veri bulunamadı.")
             return pd.DataFrame(columns=[c['name'] for c in defined_columns])
 
-        # --- 3. Formülleri Pandas ile İşle ---
+        # Sonuç DataFrame'ini hazırla
         final_df = pd.DataFrame()
-        
-        for col_def in defined_columns:
-            col_name = col_def['name']
-            formula = col_def['formula']
-            sources = col_def['sources']
             
-            parsed_formula = formula
-            for src in sources:
-                base_col = src.split('.')[-1]
-                if base_col not in raw_df.columns:
-                    raise ValueError(f"Formül hatası: '{base_col}' sütunu veritabanından çekilemedi.")
-                parsed_formula = parsed_formula.replace(f'[{src}]', f'`{base_col}`')
+        # --- 3. İşlem Moduna Göre Karar Ver ---
             
-            try:
-                final_df[col_name] = raw_df.eval(parsed_formula)
-            except Exception as e:
-                print(f"Formül hatası ({col_name}): {e}")
-                final_df[col_name] = f"Formül Hatası: {e}"
-        
-        print("Çalışan iş parçacığı: Dinamik rapor tamamlandı.")
-        return final_df
+        if agg_type_str == "Ham Veri (Grup Yok)":
+            print("Ham Veri modu: Formüller ham veriye uygulanıyor...")
+            # 'raw_df'i 'final_df'e kopyala (sadece ham sütunlar)
+            for base_col_name in source_columns_base:
+                if base_col_name in raw_df.columns:
+                     final_df[base_col_name] = raw_df[base_col_name]
+                     
+            # Formülleri (örn: Toplam) ham veriye uygula
+            for col_name, parsed_formula, agg_str in formula_definitions:
+                try:
+                    final_df[col_name] = raw_df.eval(parsed_formula, engine='python')
+                except Exception as e:
+                    print(f"Ham formül hatası ({col_name}): {e}")
+                    final_df[col_name] = f"Formül Hatası: {e}"
 
+            # 'defined_columns' listesindeki sıraya göre sütunları diz
+            ordered_columns = [c['name'] for c in defined_columns if c['name'] in final_df.columns]
+            return final_df[ordered_columns]
+
+        # --- 4. GÜNLÜK ÖZET MODU (Yeni Sıralama) ---
+        else:
+            print("Günlük Özet modu: Önce ham veriler özetlenecek...")
+            
+            # a. Tarih index'i oluştur (raw_df üzerinde)
+            try:
+                datetime_index_col = 'datetime_index_for_agg'
+                if "SAAT" in raw_df.columns and date_col_base == "TARIH":
+                    print("Agregasyon: TARIH ve SAAT birleştiriliyor...")
+                    temp_tarih = pd.to_datetime(raw_df[date_col_base], errors='coerce')
+                    temp_saat = pd.to_datetime(raw_df['SAAT'], errors='coerce')
+                    date_str = temp_tarih.dt.date.astype(str)
+                    time_str = temp_saat.dt.time.astype(str)
+                    raw_df[datetime_index_col] = pd.to_datetime(date_str + ' ' + time_str, errors='coerce')
+                else: 
+                    print(f"Agregasyon: '{date_col_base}' sütunu datetime index olarak kullanılıyor...")
+                    raw_df[datetime_index_col] = pd.to_datetime(raw_df[date_col_base], errors='coerce')
+                
+                raw_df.dropna(subset=[datetime_index_col], inplace=True) 
+                raw_df.set_index(datetime_index_col, inplace=True)
+            except Exception as e:
+                raise ValueError(f"Agregasyon için tarih index'i oluşturulamadı: {e}")
+
+            agg_dict = {}
+            for col_def in defined_columns:
+                col_name = col_def['name'] # Bu, 'H_DEBI1' veya 'Toplam' olabilir
+                agg_str = col_def.get('agg', 'Yok (Özette Gösterme)')
+                
+                if col_name == date_col_base:
+                    continue
+                if col_name in raw_df.columns:
+                    pd_agg_func = _convert_agg_string_to_func(agg_str)
+                    if pd_agg_func:
+                        agg_dict[col_name] = pd_agg_func
+
+            # c. Ham veriyi özetle
+            if not agg_dict:
+                 print("Özetlenecek ham veri sütunu bulunamadı.")
+                 final_df = raw_df.groupby(pd.Grouper(freq='D')).size().to_frame('size_placeholder')
+                 final_df = final_df.drop(columns=['size_placeholder'])
+            else:
+                print(f"Ham veri agregasyon sözlüğü uygulanıyor: {agg_dict}")
+                final_df = raw_df.groupby(pd.Grouper(freq='D')).agg(agg_dict)
+            
+            # d. Şimdi Formülleri ÖZETLENMİŞ VERİYE uygula
+            print("Formüller özetlenmiş veriye uygulanıyor...")
+            for col_name, parsed_formula, agg_str in formula_definitions:
+                try:
+                    # Formülü (örn: `H_DEBI1` + `H_DEBI3`) 'final_df' (özetlenmiş veri) üzerinde çalıştır
+                    final_df[col_name] = final_df.eval(parsed_formula, engine='python')
+                except Exception as e:
+                    print(f"Özet formül hatası ({col_name}): {e}")
+                    final_df[col_name] = f"Formül Hatası: {e}"
+
+            # e. Sonuçları 'defined_columns' sırasına ve 'agg' ayarına göre filtrele
+            ordered_and_filtered_columns = []
+            for c in defined_columns:
+                 # Eğer özet ayarı 'Yok' DEĞİLSE ve sütun final_df'de varsa
+                 if c.get('agg', 'Yok') != "Yok (Özette Gösterme)" and c['name'] in final_df.columns:
+                     ordered_and_filtered_columns.append(c['name'])
+            
+            final_df = final_df[ordered_and_filtered_columns]
+            
+            # Tarih aralığına göre son bir filtreleme yap
+            final_df = final_df.loc[start_date:end_date]
+            final_df.index.name = "Tarih"
+            final_df.dropna(how='all', inplace=True) 
+
+            print("Çalışan iş parçacığı: Dinamik rapor agregasyonu (Yeni Sıralama) tamamlandı.")
+            return final_df
+            
     except Exception as e:
         print(f"!!! HATA (run_dynamic_report_task içinde): {e}")
         traceback.print_exc()
         raise e
- 
+
+def _convert_agg_string_to_func(agg_str):
+    """(Yardımcı Fonksiyon) Kullanıcı seçimini pandas fonksiyonuna çevirir."""
+    
+    if "Toplam (Sum)" in agg_str:
+        return 'sum'
+    elif "Ortalama (Average)" in agg_str:
+        return 'mean'
+    elif "Fark (Maks-Min)" in agg_str:
+        return lambda x: x.max() - x.min() if x.count() > 0 else pd.NA
+    elif "Maksimum (Max)" in agg_str:
+        return 'max'
+    elif "Minimum (Min)" in agg_str:
+        return 'min'
+    elif "İlk Değer (First)" in agg_str:
+        return 'first'
+    elif "Son Değer (Last)" in agg_str:
+        return 'last'
+    elif "Sayı (Count)" in agg_str:
+        return 'count'
+    else:
+        # "Yok (Özette Gösterme)"
+        return None

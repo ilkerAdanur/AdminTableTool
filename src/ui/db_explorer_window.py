@@ -21,6 +21,8 @@ class DbExplorerWindow(QWidget):
         ui_file_path = os.path.join(current_dir, 'db_explorer_window.ui')
         loadUi(ui_file_path, self)
 
+        self.setMinimumSize(250, 0)
+        
         # Sürükle-Bırak ayarları
         self.treeWidget_DB.setDragEnabled(True) 
         self.treeWidget_DB.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly)

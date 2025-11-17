@@ -63,9 +63,9 @@
     </property>
     <addaction name="actionYeni_Dosya"/>
    </widget>
-   <widget class="QMenu" name="menuAyarlar">
-    <property name="title">
-     <string>Ayarlar</string>
+   <widget class="QMenu" name="menuAyarlar" >
+    <property name="title" >
+     <string >Ayarlar</string>
     </property>
     <addaction name="actionTaslak_Duzenle"/>
    </widget>

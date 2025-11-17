@@ -121,7 +121,6 @@ def run_database_query(config, target_table, baslangic_tarihi, bitis_tarihi, dat
     # --- YENİ SÜTUN SEÇME MANTIĞI ---
     columns_to_select_str = "*"
     if columns_to_select:
-        # Gelen liste ['col1', 'col2'] ise -> "[col1], [col2]" (veya "col1", "col2") yap
         if db_type == 'access':
              formatted_cols = [f"[{col}]" for col in columns_to_select]
         else:
@@ -130,36 +129,28 @@ def run_database_query(config, target_table, baslangic_tarihi, bitis_tarihi, dat
     # -------------------------------
     
     if db_type == 'access':
-        # Access: [Tablo] [Sütun] ve ? parametre stili
         formatted_table_name = f"[{target_table}]"
         formatted_date_column = f"[{date_column_name}]" 
-        # SELECT * yerine SELECT columns_to_select_str kullanıldı
         sql_query = f"SELECT {columns_to_select_str} FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN ? AND ? ORDER BY {formatted_date_column}"
         params = (baslangic_tarihi, bitis_tarihi)
         
     elif db_type == 'sql':
-        # SQL Server: "Şema"."Tablo" "Sütun" ve ? parametre stili
         if '.' in target_table:
             schema_name, table_name = target_table.split('.', 1)
             formatted_table_name = f'"{schema_name}"."{table_name}"'
         else:
             formatted_table_name = f'"{target_table}"' 
-            
         formatted_date_column = f'"{date_column_name}"' 
-        # SELECT * yerine SELECT columns_to_select_str kullanıldı
         sql_query = f"SELECT {columns_to_select_str} FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN ? AND ? ORDER BY {formatted_date_column}"
         params = (baslangic_tarihi, bitis_tarihi)
         
     elif db_type == 'postgres':
-        # PostgreSQL: "Şema"."Tablo" "Sütun" ve %(isim)s parametre stili
         if '.' in target_table:
             schema_name, table_name = target_table.split('.', 1)
             formatted_table_name = f'"{schema_name}"."{table_name}"'
         else:
             formatted_table_name = f'"{target_table}"'
-            
         formatted_date_column = f'"{date_column_name}"' 
-        # SELECT * yerine SELECT columns_to_select_str kullanıldı
         sql_query = f"SELECT {columns_to_select_str} FROM {formatted_table_name} WHERE {formatted_date_column} BETWEEN %(baslangic)s AND %(bitis)s ORDER BY {formatted_date_column}"
         params = {"baslangic": baslangic_tarihi, "bitis": bitis_tarihi}
         
@@ -170,6 +161,7 @@ def run_database_query(config, target_table, baslangic_tarihi, bitis_tarihi, dat
     
     print(f"Çalışan iş parçacığı: Sorgulama bitti. {len(df)} satır bulundu.")
     return df
+
 
 def load_excel_file(tam_yol):
     """(Worker Görevi) Excel okuma işi"""

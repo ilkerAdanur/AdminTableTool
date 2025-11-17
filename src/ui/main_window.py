@@ -109,6 +109,9 @@ class MainWindow(QMainWindow):
             self.actionPostgreSQL.triggered.connect(
                 functools.partial(self.set_database_type, "postgres")
             )
+            self.actionMySQL.triggered.connect(
+                functools.partial(self.set_database_type, "mysql")
+            )
             self.actionVeritabani_Gezgini.triggered.connect(self.dbExplorerDock.toggleViewAction().trigger)
         except AttributeError: pass
 
@@ -118,6 +121,8 @@ class MainWindow(QMainWindow):
             if hasattr(self, 'tools_dock'): # tools_dock oluşturulduysa bağla
                 self.actionArac_Kutusu.triggered.connect(self.tools_dock.toggleViewAction().trigger)
         except AttributeError: pass
+
+
              
         self.db_explorer.table_activated.connect(self.create_new_report_tab)
 

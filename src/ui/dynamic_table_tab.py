@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
     QHeaderView, QMenu, QAbstractItemView, QMessageBox, QInputDialog,
     QLabel, QLineEdit
 )
+import re
 from PyQt6.QtCore import Qt, QMimeData, pyqtSignal
 from PyQt6.QtGui import QAction
 
@@ -161,10 +162,25 @@ class DynamicTableTab(QWidget):
         controls_layout.addWidget(self.date_Bitis)
 
         controls_layout.addWidget(QLabel("Tarih Sütunu:"))
+        
+
         self.date_column_combo = QComboBox()
+
+        
         self.date_column_combo.setToolTip("Raporu filtrelemek için kullanılacak ana tarih sütunu")
         self._populate_date_columns() # Yardımcı fonksiyonu çağır
         controls_layout.addWidget(self.date_column_combo)
+
+        controls_layout.addWidget(QLabel("Görünüm:"))
+        self.agg_type_combo = QComboBox()
+        self.agg_type_combo.setToolTip("Raporun ham veriyi mi, yoksa tarih bazlı özeti mi göstereceğini seçin.")
+
+        self.agg_type_combo.clear() 
+        self.agg_type_combo.addItems([
+            "Ham Veri (Grup Yok)",
+            "Günlük Özet (Tarihe Göre Grupla)"
+        ])
+        controls_layout.addWidget(self.agg_type_combo)
 
         controls_layout.addStretch(1) # Butonu sağa it
 
@@ -234,6 +250,7 @@ class DynamicTableTab(QWidget):
             print(f"Hata: Tarih sütunları doldurulamadı: {e}")
 
         self.date_column_combo.blockSignals(False)
+    
     def handle_columns_dropped(self, dropped_column_names, target_index):
         """
         Sütun(lar) başlığa bırakıldığında çalışır.
@@ -273,14 +290,21 @@ class DynamicTableTab(QWidget):
             if not (ok and new_col_name):
                 return # İptal edildi
 
-            # Yeni sütun tanımını hafızaya ekle
+
+            default_agg_str = "Toplam (Sum)" 
+            
+            if any(id_str in new_col_name.lower() for id_str in ["kimlik", "id", "tarih", "saat"]):
+                default_agg_str = "İlk Değer (First)"
+            
+            print(f"Sütun eklendi. Varsayılan özet ayarı: {default_agg_str}")
+
             new_column_def = {
                 'name': new_col_name,
                 'type': 'formula',
                 'formula': formula,
-                'sources': dropped_column_names
+                'sources': dropped_column_names,
+                'agg': default_agg_str  
             }
-            # [Yeni Sütun Ekle]'den ÖNCE ekle
             self.defined_columns.insert(target_index, new_column_def)
 
         else:
@@ -290,7 +314,6 @@ class DynamicTableTab(QWidget):
             current_name = col_def['name']
             current_formula = col_def.get('formula', "")
 
-            # Bırakılan yeni sütun(lar) için formül parçası oluştur
             new_formula_part = " + ".join([f"[{col}]" for col in dropped_column_names])
 
             reply = QMessageBox.question(self, "Sütunu Güncelle",
@@ -302,13 +325,11 @@ class DynamicTableTab(QWidget):
             if reply == QMessageBox.StandardButton.Yes:
                 # Tanımı güncelle
                 col_def['formula'] = f"{current_formula} + {new_formula_part}"
-                # Yeni kaynakları da ekle (tekrarları önleyerek)
                 if 'sources' not in col_def:
                     col_def['sources'] = []
                 for col in dropped_column_names:
                     if col not in col_def['sources']:
                         col_def['sources'].append(col)
-
                 print(f"'{current_name}' sütunu güncellendi. Yeni formül: {col_def['formula']}")
             else:
                 return # Güncelleme iptal edildi
@@ -316,7 +337,6 @@ class DynamicTableTab(QWidget):
         self.refresh_table_headers()
 
         # TODO: Worker'ı tetikleyip tabloyu ilk 10 satır veriyle doldur (Önizleme)
-
 
     def refresh_table_headers(self):
         """
@@ -360,7 +380,7 @@ class DynamicTableTab(QWidget):
         
         menu.exec(self.table.horizontalHeader().mapToGlobal(position))
 
-    def edit_column_formula(self, index): # <-- 'index' parametresi eklendi
+    def edit_column_formula(self, index): 
         """Bir sütunun formülünü düzenler (Başlığa çift tıklandığında)."""
 
         if index < 0 or index >= len(self.defined_columns): # [Yeni Sütun Ekle]'ye tıklandıysa
@@ -391,11 +411,42 @@ class DynamicTableTab(QWidget):
         if not (ok and new_formula):
             return 
 
+        new_sources = re.findall(r"\[(.*?)\]", new_formula)
+        if not new_sources:
+            QMessageBox.warning(self, "Formül Hatası",
+                                "Formülde [KaynakSutun] formatında en az bir kaynak sütun bulunamadı.")
+            return
+
+        agg_options = [
+            "Yok (Özette Gösterme)",
+            "Toplam (Sum)", 
+            "Ortalama (Average)", 
+            "Fark (Maks-Min)", 
+            "Maksimum (Max)", 
+            "Minimum (Min)", 
+            "İlk Değer (First)", 
+            "Son Değer (Last)", 
+            "Sayı (Count)"
+        ]
+        
+        # Mevcut ayarı bul veya varsayılanı ata
+        current_agg = col_def.get('agg', 'Toplam (Sum)') 
+        try:
+            current_agg_index = agg_options.index(current_agg)
+        except ValueError:
+            current_agg_index = 0 # 'Yok'
+        
+        new_agg_str, ok = QInputDialog.getItem(self, "Özet İşlemi Seç",
+                                               f"'{new_name}' sütunu 'Günlük Özet' modunda nasıl gösterilsin?",
+                                               agg_options, current_agg_index, False)
+        if not ok:
+            return 
+
         self.defined_columns[index]['name'] = new_name
         self.defined_columns[index]['formula'] = new_formula
+        self.defined_columns[index]['agg'] = new_agg_str 
 
         self.refresh_table_headers()
-        # TODO: Tablodaki veriyi de yenile
     
     def delete_column(self, index):
         """Bir sütunu taslaktan kaldırır."""
@@ -429,6 +480,8 @@ class DynamicTableTab(QWidget):
         start_date = self.date_Baslangic.date().toString("yyyy-MM-dd")
         end_date = self.date_Bitis.date().toString("yyyy-MM-dd")
 
+        agg_type_str = self.agg_type_combo.currentText()
+
         self.main_window.show_loading_dialog(f"'{self.windowTitle()}' raporu çalıştırılıyor...")
 
         # Yeni görevimizi (run_dynamic_report_task) çağır
@@ -438,7 +491,8 @@ class DynamicTableTab(QWidget):
             self.defined_columns,
             full_date_column,
             start_date,
-            end_date
+            end_date,
+            agg_type_str
         )
 
         worker.signals.finished.connect(self._on_report_finished) 
@@ -465,10 +519,28 @@ class DynamicTableTab(QWidget):
         self.table.setSortingEnabled(False)
         self.table.setRowCount(0) 
 
-        # --- DÜZELTME: Sütun sayısını tanımlara göre ayarla ---
-        # Sütunları temizlemek yerine, 'defined_columns'a göre yeniden ayarla
-        self.refresh_table_headers()
+        
         # ----------------------------------------------------
+
+        
+        has_date_index = (df.index.name is not None)
+        df_columns = list(df.columns)
+        header_labels = list(df.columns) # Gelen DF'in sütunları
+        col_offset = 0
+
+        if has_date_index:
+            header_labels.insert(0, df.index.name) # Başına 'Tarih' index'ini ekle
+            col_offset = 1
+            # Sütun sayısını ayarla: Tarih + Veri Sütunları + [Yeni Sütun Ekle]
+            self.table.setColumnCount(len(df_columns) + 1 + 1)
+            self.table.setHorizontalHeaderLabels(header_labels + ["[Yeni Sütun Ekle]"])
+        else:
+            # Ham Veri modu: refresh_table_headers() güvenli
+            self.refresh_table_headers()
+        
+        # (refresh_table_headers() zaten sütunları (Tarih hariç) ayarlamıştı,
+        #  ama agregasyon durumunda başlıkları yeniden ayarlamak daha güvenli)
+        # --- EKLENTİ SONU ---
 
         if df.empty:
             self.table.setSortingEnabled(True)
@@ -477,17 +549,21 @@ class DynamicTableTab(QWidget):
                 QMessageBox.information(self, "Veri Yok", "Seçilen tarih aralığında veri bulunamadı.")
             return
 
-        # Sütun adları DF ile uyuşuyor mu kontrol et
-        if list(df.columns) != [col['name'] for col in self.defined_columns]:
-            print("HATA: Doldurulacak veri ile sütun tanımları eşleşmiyor.")
-            # Başlıkları DF'e göre ayarla (fallback)
-            self.table.setColumnCount(len(df.columns) + 1)
-            self.table.setHorizontalHeaderLabels(list(df.columns) + ["[Yeni Sütun Ekle]"])
 
         self.table.setRowCount(len(df))
 
         # Veriyi doldur
         for i in range(len(df)):
+            
+            # --- GÜNCELLENMİŞ DOLDURMA MANTIĞI ---
+            if has_date_index:
+                # 1. Index (Tarih) hücresini ekle
+                index_val = df.index[i]
+                date_str = str(index_val.strftime('%Y-%m-%d')) if hasattr(index_val, 'strftime') else str(index_val)
+                item = QTableWidgetItem(date_str)
+                item.setData(Qt.ItemDataRole.EditRole, date_str) # Sıralama için
+                self.table.setItem(i, 0, item)
+
             for j in range(len(df.columns)): # Sadece DF'in sütun sayısı kadar
                 raw_value = df.iloc[i, j]
                 item = QTableWidgetItem()
@@ -496,19 +572,33 @@ class DynamicTableTab(QWidget):
                 is_numeric = isinstance(raw_value, (int, float))
                 if is_numeric:
                     item.setData(Qt.ItemDataRole.EditRole, float(raw_value))
-                    item.setData(Qt.ItemDataRole.DisplayRole, str(raw_value))
+                    # Sayıyı formatlayarak göster (örn: .2f)
+                    try:
+                        item.setData(Qt.ItemDataRole.DisplayRole, f"{raw_value:.2f}")
+                    except (TypeError, ValueError):
+                         item.setData(Qt.ItemDataRole.DisplayRole, str(raw_value))
                 else:
                     item.setData(Qt.ItemDataRole.DisplayRole, str(raw_value))
 
-                self.table.setItem(i, j, item)
+                self.table.setItem(i, j + col_offset, item) # <-- col_offset'i burada kullan
+            # --- GÜNCELLENMİŞ MANTIĞI SONU ---
 
         self.table.setSortingEnabled(True)
         self.table.setUpdatesEnabled(True)
 
-        # Sütun genişliklerini ayarla (refresh_table_headers'da yapılmıştı ama tekrar edelim)
-        for i in range(len(self.defined_columns)):
-            self.table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
-        self.table.horizontalHeader().setSectionResizeMode(len(self.defined_columns), QHeaderView.ResizeMode.ResizeToContents)
+        # Sütun genişliklerini ayarla
+        # --- YENİ EKLENTİ ---
+        col_offset = 0
+        if has_date_index:
+            self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents) # Tarih sütunu
+            col_offset = 1
+        
+        # 'self.defined_columns' yerine 'df.columns' sayısını kullan
+        for i in range(len(df.columns)): 
+            self.table.horizontalHeader().setSectionResizeMode(i + col_offset, QHeaderView.ResizeMode.Interactive)
+        
+        last_col_index = self.table.columnCount() - 1
+        self.table.horizontalHeader().setSectionResizeMode(last_col_index, QHeaderView.ResizeMode.ResizeToContents)
 
     def _populate_date_columns(self):
         self.date_column_combo.blockSignals(True)

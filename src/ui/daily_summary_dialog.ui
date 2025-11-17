@@ -20,7 +20,7 @@
    <item>
     <widget class="QGroupBox" name="groupBox_Settings">
      <property name="title">
-      <string>Ayarlar</string>
+      <string >Ayarlar</string>
      </property>
      <layout class="QFormLayout" name="formLayout">
       <item row="0" column="0">
