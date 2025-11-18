@@ -48,15 +48,25 @@ def setup_logging():
     logging.info("--- Loglama sistemi başlatıldı ---")
 
 if __name__ == '__main__':
-    # Loglamayı, QApplication'dan bile önce ayarlayın
     setup_logging() 
     
     try:
         app = QApplication(sys.argv)
-        register_pdf_fonts()  # Register fonts for PDF generation
+        register_pdf_fonts()
         window = MainWindow()
         window.show()
-        logging.info("Ana pencere (MainWindow) başarıyla gösterildi.")
+        
+        # --- YENİ: Başlangıçta dosya ile açılma kontrolü ---
+        # sys.argv[0] programın kendisidir.
+        # Eğer sys.argv[1] varsa, bu bir dosya yoludur (birlikte aç/çift tıklama).
+        if len(sys.argv) > 1:
+            file_to_open = sys.argv[1]
+            if os.path.exists(file_to_open) and file_to_open.endswith(".att"):
+                logging.info(f"Uygulama dosya ile başlatıldı: {file_to_open}")
+                # MainWindow'daki yükleme fonksiyonunu çağır
+                window.load_att_file(file_to_open)
+        # ---------------------------------------------------
+
         sys.exit(app.exec())
         
     except Exception as e:

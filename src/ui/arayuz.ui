@@ -63,9 +63,9 @@
     </property>
     <addaction name="actionYeni_Dosya"/>
    </widget>
-   <widget class="QMenu" name="menuAyarlar" >
-    <property name="title" >
-     <string >Ayarlar</string>
+   <widget class="QMenu" name="menuAyarlar">
+    <property name="title">
+     <string>Ayarlar</string>
     </property>
     <addaction name="actionTaslak_Duzenle"/>
    </widget>
@@ -93,6 +93,7 @@
     </property>
     <addaction name="actionGunluk_Ozet_Raporu"/>
     <addaction name="actionArac_Kutusu"/>
+    <addaction name="actionShow_Excel"/>
    </widget>
    <widget class="QMenu" name="menuProfil">
     <property name="title">
@@ -131,7 +132,6 @@
     </layout>
    </widget>
   </widget>
-  
   <action name="actionYeni_Dosya">
    <property name="text">
     <string>Yeni Dosya</string>
@@ -185,6 +185,11 @@
   <action name="actionArac_Kutusu">
    <property name="text">
     <string>Araç Kutusunu Göster</string>
+   </property>
+  </action>
+  <action name="actionShow_Excel">
+   <property name="text">
+    <string>Excelleri Göster</string>
    </property>
   </action>
  </widget>

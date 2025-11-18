@@ -69,10 +69,54 @@ class MainWindow(QMainWindow):
         self.statusbar.addPermanentWidget(self.status_light)
         
         self._setup_docks()
+        self._setup_file_menu()
         self._connect_signals()
 
         self.update_connection_status("Bağlı Değil", is_connected=False)
         self.mainTabWidget.tabCloseRequested.connect(self._close_tab)
+
+    def save_current_tab(self):
+        """Aktif sekmedeki save_file fonksiyonunu tetikler."""
+        current_widget = self.mainTabWidget.currentWidget()
+        if hasattr(current_widget, "save_file"):
+            current_widget.save_file()
+        else:
+            self.statusbar.showMessage("Bu sekme kaydedilebilir bir dosya değil.", 2000)
+
+    def save_as_current_tab(self):
+        """Aktif sekmedeki save_file_as fonksiyonunu tetikler."""
+        current_widget = self.mainTabWidget.currentWidget()
+        if hasattr(current_widget, "save_file_as"):
+            current_widget.save_file_as()
+
+    def open_saved_file(self):
+        """Dosya açma diyaloğunu başlatır."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Dosya Aç",
+            "",
+            "AdminTableTool Dosyası (*.att);;JSON Dosyası (*.json);;Tüm Dosyalar (*.*)"
+        )
+        
+        if file_path:
+            self.load_att_file(file_path)
+
+    def load_att_file(self, file_path):
+        """Verilen yoldaki .att dosyasını yeni bir sekmede açar."""
+        # Önce dosya türünü anlamaya çalış (basitçe uzantı veya içeriğe bakılabilir)
+        # Şimdilik varsayılan olarak DynamicTableTab açıyoruz.
+        
+        tab_name = os.path.basename(file_path).split('.')[0]
+        
+        # Yeni sekme oluştur
+        new_tab = DynamicTableTab(self)
+        
+        # Sekmeyi ekle
+        index = self.mainTabWidget.addTab(new_tab, tab_name)
+        self.mainTabWidget.setCurrentIndex(index)
+        
+        # Dosyayı yükle
+        new_tab.load_from_file(file_path)
 
     def _setup_docks(self):
         """Veritabanı Gezgini'ni (.py) bulur ve .ui'daki dock'a yerleştirir."""
@@ -134,6 +178,10 @@ class MainWindow(QMainWindow):
              
         self.db_explorer.table_activated.connect(self.create_new_report_tab)
         logger.debug("MainWindow sinyalleri bağlandı.") # <-- LOG
+        try:
+            self.actionShow_Excel.triggered.connect(self.open_excel_archive_tab)
+        except AttributeError:
+            logger.warning("UYARI: 'actionShow_Excel' ui dosyasında bulunamadı.")
 
     def _close_tab(self, index):
         widget = self.mainTabWidget.widget(index)
@@ -214,6 +262,36 @@ class MainWindow(QMainWindow):
         self.mainTabWidget.setCurrentIndex(index)
         logger.info(f"Yeni 'ReportTabWidget' sekmesi oluşturuldu: '{table_name}' (Tarih Sütunu: {date_col})") # <-- LOG
 
+    def open_excel_archive_tab(self):
+        """
+        Araçlar -> Excel Görüntüleyici.
+        Veritabanı bağlantısı olmadan sadece kayıtlı raporları gezmek için bir sekme açar.
+        """
+        logger.info("Excel Arşiv Görüntüleyici açılıyor...")
+        
+        # Bağlantı yokmuş gibi 'offline' bir konfigürasyon oluşturuyoruz
+        dummy_config = {
+            'type': 'Arşiv Modu', 
+            'database': 'Yerel Dosyalar', 
+            'host': 'PC'
+        }
+        
+        # Sekmeyi oluştur
+        # target_table="Excel Arşivi" diyerek başlığı belirliyoruz
+        archive_tab = ReportTabWidget(
+            main_window=self,
+            db_config=dummy_config,
+            target_table="Kayıtlı Excel Arşivi",
+            target_date_column="TARIH", # Varsayılan
+            full_schema_data={} # Şema yok
+        )
+        
+        # Sekmeyi ekle ve odaklan
+        index = self.mainTabWidget.addTab(archive_tab, "📂 Excel Arşivi")
+        self.mainTabWidget.setCurrentIndex(index)
+        
+        # Kullanıcıya bilgi ver
+        self.statusbar.showMessage("Kayıtlı raporlar 'Kayıtlı Rapor Seç' kutusundan görüntülenebilir.", 5000)
     # --- Veritabanı Bağlantı Akışı ---
 
     def set_database_type(self, db_type):
@@ -481,3 +559,56 @@ class MainWindow(QMainWindow):
         self.threadpool.waitForDone()
         logger.info("Tüm görevler tamamlandı. Uygulama kapanıyor.") # <-- LOG
         event.accept()
+
+    def _setup_file_menu(self):
+        """Dosya menüsüne Kaydet, Farklı Kaydet ve Aç seçeneklerini ekler."""
+        from PyQt6.QtGui import QAction, QKeySequence
+
+        # Dosya Menüsünü Bul (ui dosyasından gelen)
+        file_menu = self.menuDosya 
+        
+        # Ayırıcı ekle (Yeni Dosya'dan sonra)
+        file_menu.addSeparator()
+
+        # 1. Dosyayı Aç
+        self.actionDosyayi_Ac = QAction("Dosyayı Aç...", self)
+        self.actionDosyayi_Ac.setShortcut(QKeySequence("Ctrl+O"))
+        self.actionDosyayi_Ac.triggered.connect(self.open_saved_file)
+        file_menu.addAction(self.actionDosyayi_Ac)
+
+        # 2. Kaydet
+        self.actionKaydet = QAction("Kaydet", self)
+        self.actionKaydet.setShortcut(QKeySequence("Ctrl+S"))
+        self.actionKaydet.triggered.connect(self.save_current_tab)
+        file_menu.addAction(self.actionKaydet)
+
+        # 3. Farklı Kaydet
+        self.actionFarkli_Kaydet = QAction("Farklı Kaydet...", self)
+        self.actionFarkli_Kaydet.setShortcut(QKeySequence("Ctrl+Shift+S"))
+        self.actionFarkli_Kaydet.triggered.connect(self.save_as_current_tab)
+        file_menu.addAction(self.actionFarkli_Kaydet)
+
+    def open_generated_excel_tab(self, file_path):
+        """
+        (YENİ) Oluşturulan Excel dosyasını yeni bir ReportTabWidget sekmesinde açar.
+        """
+        file_name = os.path.basename(file_path)
+        logger.info(f"Yeni oluşturulan Excel için sekme açılıyor: {file_name}")
+
+        # Yeni bir rapor sekmesi oluştur (Bağlantı olmasa bile açılabilmeli)
+        # Dummy (sahte) verilerle başlatıyoruz çünkü sadece Excel gösterecek
+        new_tab = ReportTabWidget(
+            main_window=self,
+            db_config=self.db_config if self.db_config else {'type': 'offline'},
+            target_table="Excel Raporu",
+            target_date_column="TARIH",
+            full_schema_data={}
+        )
+
+        # Sekmeyi ekle
+        index = self.mainTabWidget.addTab(new_tab, file_name)
+        self.mainTabWidget.setCurrentIndex(index)
+
+        # Dosyayı yüklemesini söyle
+        new_tab.load_specific_file(file_path)
+    

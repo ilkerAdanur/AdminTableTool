@@ -468,3 +468,21 @@ class ReportTabWidget(QWidget):
         self.tbl_Veri.setSortingEnabled(True)
         self.tbl_Veri.setUpdatesEnabled(True)
         logger.debug("Tabloyu doldurma işlemi tamamlandı.") 
+    
+    def load_specific_file(self, file_path):
+        """
+        (YENİ) Dışarıdan verilen tam dosya yolundaki Excel'i bu sekmede açar.
+        """
+        if not os.path.exists(file_path):
+            logger.error(f"Dosya bulunamadı: {file_path}")
+            return
+
+        self.currently_viewing_excel = os.path.basename(file_path)
+        logger.info(f"Özel dosya yükleniyor: {file_path}")
+
+        # Yükleme worker'ını başlat
+        self.main_window.show_loading_dialog(f"{self.currently_viewing_excel} açılıyor...")
+        worker = Worker(load_excel_file, file_path)
+        worker.signals.finished.connect(self._on_excel_loaded)
+        worker.signals.error.connect(self.main_window._on_task_error)
+        self.main_window.threadpool.start(worker)
