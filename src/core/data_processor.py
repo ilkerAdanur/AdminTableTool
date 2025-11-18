@@ -1,5 +1,6 @@
 # src/core/data_processor.py
 
+from venv import logger
 import pandas as pd
 import re
 
@@ -20,7 +21,7 @@ def _prepare_formula(formula, source_columns):
     # [Column Name] -> `Column Name` çevirisi
     processed_formula = formula
     for col in used_columns:
-         processed_formula = processed_formula.replace(f'[{col}]', f'`{col}`') # ` ` (backtick) kullan
+         processed_formula = processed_formula.replace(f'[{col}]', f'`{col}`') 
 
     return processed_formula
 
@@ -35,36 +36,35 @@ def apply_template(raw_df: pd.DataFrame, template_data: dict):
         pd.DataFrame: İşlenmiş ve rapor için hazır DataFrame.
     """
     if raw_df.empty:
-        print("apply_template: Ham veri boş, işlem yapılmadı.")
+        logger.warning("apply_template: Ham veri boş, işlem yapılmadı.")
         return raw_df
 
     if not template_data or not template_data.get("columns"):
-        print("apply_template: Geçerli taslak verisi yok, ham veri döndürülüyor.")
+        logger.warning("apply_template: Geçerli taslak verisi yok, ham veri döndürülüyor.")
         return raw_df
 
-    print("Taslak uygulanıyor...")
-    processed_df = raw_df.copy() # Orijinal veriyi bozmamak için kopyala
-    source_columns = list(processed_df.columns) # Ham sütun adları
+    logger.info("Taslak uygulanıyor...")
+    processed_df = raw_df.copy() 
+    source_columns = list(processed_df.columns) 
 
     # 1. Hesaplanan Sütunları Oluştur
     formulas = template_data.get("formulas", {})
-    calculated_columns = {} # Hesaplanan sütunları geçici olarak sakla
+    calculated_columns = {} 
 
     for new_col_name, formula in formulas.items():
         try:
-            # Formülü eval için hazırla (`[Col]` -> `` `Col` ``) ve kontrol et
             eval_formula = _prepare_formula(formula, source_columns)
 
-            # Pandas eval() ile hesaplamayı yap ve yeni DataFrame'e ekle
-            # engine='python' daha esnek formüllere izin verir
+            
             calculated_values = processed_df.eval(eval_formula, engine='python')
             calculated_columns[new_col_name] = calculated_values
-            print(f"Hesaplanan sütun '{new_col_name}' oluşturuldu.")
+            logger.info(f"Hesaplanan sütun '{new_col_name}' oluşturuldu.")
 
         except Exception as e:
-            # Hata durumunda kullanıcıyı bilgilendir ama programı çökertme
-            print(f"HATA: '{new_col_name}' sütunu için formül '{formula}' uygulanamadı: {e}")
-            # Hatalı sütunu NaN (Not a Number) ile doldurabiliriz
+            logger.error(
+                f"'{new_col_name}' sütunu için formül '{formula}' uygulanamadı: {e}", 
+                exc_info=True
+            )
             calculated_columns[new_col_name] = pd.NA 
 
     for col_name, values in calculated_columns.items():
@@ -95,7 +95,10 @@ def apply_template(raw_df: pd.DataFrame, template_data: dict):
              if actual_col_name != display_name:
                   rename_map[actual_col_name] = display_name
         else:
-             print(f"UYARI: Taslaktaki '{display_name}' sütunu ({actual_col_name}) işlenmiş veride bulunamadı, atlanıyor.")
+             logger.error(
+                f"'{new_col_name}' sütunu için formül '{formula}' uygulanamadı: {e}", 
+                exc_info=True
+            )
 
     if final_columns_order:
         final_df = processed_df[final_columns_order]
@@ -105,7 +108,7 @@ def apply_template(raw_df: pd.DataFrame, template_data: dict):
         print("UYARI: Taslakta geçerli sütun bulunamadı, ham veri döndürülüyor.")
         return pd.DataFrame() 
 
-    print("Taslak başarıyla uygulandı.")
+    logger.info("Taslak başarıyla uygulandı.")
     return final_df
 
 def process_daily_summary(raw_df: pd.DataFrame, settings: dict):

@@ -1,5 +1,6 @@
 # src/threading/workers.py
 import traceback
+from venv import logger
 from PyQt6.QtCore import QRunnable, QObject, pyqtSignal
 
 class WorkerSignals(QObject):
@@ -18,7 +19,7 @@ class Worker(QRunnable):
         try:
             result = self.fn(*self.args, **self.kwargs)
         except Exception as e:
-            print(f"Worker hatası: {e}")
+            logger.error(f"Worker hatası: {e}", exc_info=True)
             traceback.print_exc()
             self.signals.error.emit(str(e))
         else:

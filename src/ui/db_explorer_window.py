@@ -6,7 +6,8 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QTreeWidgetItem, QStyle, QAbstractItemView
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QMimeData
-
+import logging
+logger = logging.getLogger(__name__)
 
 
 class DbExplorerWindow(QWidget):
@@ -45,7 +46,7 @@ class DbExplorerWindow(QWidget):
         if parent and parent.text(0) == "Tables":
             table_name = item.data(0, Qt.ItemDataRole.UserRole) # Sadece metni değil, tam adı al
             if table_name:
-                print(f"Veritabanı Gezgini: '{table_name}' tablosu aktive edildi.")
+                logger.info(f"Veritabanı Gezgini: '{table_name}' tablosu aktive edildi.")
                 self.table_activated.emit(table_name)
 
     def populate_tree(self, db_config, full_schema_data):
@@ -110,7 +111,7 @@ class DbExplorerWindow(QWidget):
                     text_data += f"{full_path}\n" # Birden fazla seçimi desteklemek için
 
         mime_data.setText(text_data.strip())
-        print(f"Sürükleme başladı. Taşınan veri: {mime_data.text()}")
+        logger.debug(f"Sürükleme başladı. Taşınan veri: {mime_data.text()}")
         return mime_data
 
     def clear_tree(self):

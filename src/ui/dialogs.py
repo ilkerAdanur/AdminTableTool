@@ -1,4 +1,5 @@
 # src/ui/dialogs.py
+import json
 from PyQt6 import QtWidgets
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit, 
@@ -7,8 +8,9 @@ from PyQt6.QtWidgets import (
     QGroupBox, QListWidget, QTableWidget, QAbstractItemView,
     QTableWidgetItem, QTextEdit, QSizePolicy, QSpacerItem,QMessageBox 
 )
-from src.core.template_manager import save_template, load_template, get_available_templates
-
+from src.core.template_manager import TEMPLATE_DIR, load_template_from_path, save_template, load_template, get_available_templates
+import logging
+logger = logging.getLogger(__name__)
 
 
 class ConnectionDialog(QDialog):
@@ -340,18 +342,37 @@ class TemplateEditorDialog(QDialog):
              QMessageBox.warning(self, "Hata", "Taslak verisi toplanamadı.")
              return
 
-        if save_template(template_name, template_data, parent_widget=self):
+        try:
+            save_template(template_name, template_data)
+            
             QMessageBox.information(self, "Başarılı", f"'{template_name}' taslağı başarıyla kaydedildi.")
+
+        except (ValueError, IOError) as e:
+            QMessageBox.critical(self, "Kayıt Hatası", str(e))
 
     def _load_template(self):
         """'Yükle...' butonuna basıldığında çalışır."""
-        template_data = load_template(template_name=None, parent_widget=self)
+        selected_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Rapor Taslağı Yükle",
+            TEMPLATE_DIR, 
+            "JSON Dosyaları (*.json);;Tüm Dosyalar (*.*)"
+        )
         
-        if template_data:
-            self._populate_ui_from_template(template_data) 
-            loaded_name = template_data.get("_template_name", "")
-            self.template_name_edit.setText(loaded_name)
-            QMessageBox.information(self, "Başarılı", f"'{loaded_name}' taslağı yüklendi.")
+        if not selected_path:
+            return 
+
+        try:
+            template_data = load_template_from_path(selected_path)
+            
+            if template_data:
+                self._populate_ui_from_template(template_data) 
+                loaded_name = template_data.get("_template_name", "")
+                self.template_name_edit.setText(loaded_name)
+                QMessageBox.information(self, "Başarılı", f"'{loaded_name}' taslağı yüklendi.")
+
+        except (FileNotFoundError, json.JSONDecodeError, IOError) as e:
+            QMessageBox.critical(self, "Yükleme Hatası", str(e))
 
     def _collect_template_data(self):
         """Arayüzdeki (Rapor Sütunları tablosu) veriyi bir sözlük olarak toplar."""
@@ -365,7 +386,7 @@ class TemplateEditorDialog(QDialog):
             source_formula_item = self.report_columns_table.item(row, 2)
 
             if not display_name_item or not type_item or not source_formula_item:
-                 print(f"UYARI: Satır {row} verisi eksik, atlanıyor.")
+                 logger.warning(f"UYARI: Satır {row} verisi eksik, atlanıyor.")
                  continue 
 
             display_name = display_name_item.text()
@@ -394,7 +415,7 @@ class TemplateEditorDialog(QDialog):
         
         columns = template_data.get("columns", [])
         if not columns:
-             print("UYARI: Yüklenen taslakta 'columns' listesi bulunamadı veya boş.")
+             logger.warning("UYARI: Yüklenen taslakta 'columns' listesi bulunamadı veya boş.")
              return
 
         for col_data in columns:
@@ -411,10 +432,10 @@ class TemplateEditorDialog(QDialog):
         
         self.formula_group.setVisible(False)
         self._editing_formula_row = -1
-    # --- OK Butonu ---
+
     def accept(self):
         # Kullanıcı 'OK'e bastığında taslak verilerini topla ve sakla
-        print("Taslak Düzenleyici - OK tıklandı")
+        logger.info("Taslak Düzenleyici - OK tıklandı")
         self.template_data = self._collect_template_data() 
         if not self.template_data or not self.template_data.get("columns"):
              reply = QMessageBox.question(self, "Boş Taslak", 
@@ -425,7 +446,7 @@ class TemplateEditorDialog(QDialog):
                   return 
                   
         super().accept()
-    # --- Ana Pencerenin Kullanması İçin ---
+
     def get_template_data(self):
         """'accept' içinde toplanan veriyi döndürür."""
         return getattr(self, "template_data", None)

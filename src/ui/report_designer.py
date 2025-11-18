@@ -1,6 +1,7 @@
 # src/ui/report_designer.py
 
 import os
+import logging
 import pandas as pd
 import functools
 from PyQt6.uic import loadUi
@@ -19,6 +20,8 @@ from src.threading.workers import Worker
 # -------------------------------------------------------------------
 # --- 1. SINIF: Sürükle-Bırak'ı yakalayan View ---
 # -------------------------------------------------------------------
+logger = logging.getLogger(__name__)
+
 class DroppableGraphicsView(QGraphicsView):
     """
     Sürükle-bırak (Drag-and-Drop) olaylarını yakalayan
@@ -44,7 +47,8 @@ class DroppableGraphicsView(QGraphicsView):
 
         drag_text = event.mimeData().text().strip()
         drop_position = self.mapToScene(event.position().toPoint()) 
-        print(f"'{drag_text}' tuval üzerine bırakıldı (Pozisyon: {drop_position})")
+        # --- DEĞİŞİKLİK (print -> logger.info) ---
+        logger.info(f"'{drag_text}' tuval üzerine bırakıldı (Pozisyon: {drop_position})")
 
         # Ana pencereden bağlantı ve şema bilgilerini al
         full_schema = self.main_window.full_schema_data
@@ -65,6 +69,7 @@ class DroppableGraphicsView(QGraphicsView):
 
         # --- ESKİ MANTIK: Veritabanı Gezgini'nden mi? ---
         if not full_schema:
+            logger.warning("Veritabanı şeması bulunamadı, bırakma işlemi iptal edildi.") # <-- LOG
             QMessageBox.warning(self, "Hata", "Veritabanı şeması bulunamadı.")
             event.ignore()
             return
@@ -77,7 +82,8 @@ class DroppableGraphicsView(QGraphicsView):
             item_type = "Table"
             table_name = drag_text
             column_name = None
-            print(f"Bırakılan: Tablo ({table_name})")
+            # --- DEĞİŞİKLİK (print -> logger.debug) ---
+            logger.debug(f"Bırakılan: Tablo ({table_name})")
 
         elif len(parts) > 1:
             potential_table_name = ".".join(parts[:-1]) 
@@ -85,7 +91,8 @@ class DroppableGraphicsView(QGraphicsView):
                 item_type = "Column"
                 table_name = potential_table_name
                 column_name = parts[-1]
-                print(f"Bırakılan: Sütun ({table_name}.{column_name})")
+                # --- DEĞİŞİKLİK (print -> logger.debug) ---
+                logger.debug(f"Bırakılan: Sütun ({table_name}.{column_name})")
 
         if item_type:
             event.acceptProposedAction()
@@ -96,6 +103,7 @@ class DroppableGraphicsView(QGraphicsView):
             proxy = self.scene().addWidget(loading_label)
             proxy.setPos(drop_position)
 
+            logger.info("Önizleme verisi için worker başlatılıyor...") # <-- LOG
             worker = Worker(fetch_preview_data_task, config, table_name, column_name, limit=10)
 
             worker.signals.finished.connect(
@@ -109,7 +117,8 @@ class DroppableGraphicsView(QGraphicsView):
 
             self.main_window.threadpool.start(worker)
         else:
-            print(f"Anlaşılamayan sürükleme verisi: {drag_text}")
+            # --- DEĞİŞİKLİK (print -> logger.warning) ---
+            logger.warning(f"Anlaşılamayan sürükleme verisi: {drag_text}")
             event.ignore()
 
     # --- YENİ YARDIMCI FONKSİYONLAR (Araç Kutusu için) ---
@@ -146,11 +155,14 @@ class DroppableGraphicsView(QGraphicsView):
     def _on_preview_data_loaded(self, data_frame, drop_position, loading_proxy):
         """(Callback) Worker'dan önizleme verisi (DataFrame) geldiğinde çalışır."""
         
+        logger.info("Önizleme verisi başarıyla alındı, tablo oluşturuluyor.") # <-- LOG
+        
         # "Yükleniyor..." etiketini kaldır
         self.scene().removeItem(loading_proxy)
         del loading_proxy
         
         if data_frame is None or data_frame.empty:
+            logger.warning("Önizleme için veri çekilemedi veya seçilen kaynak boş.") # <-- LOG
             QMessageBox.warning(self, "Veri Yok", "Önizleme için veri çekilemedi veya seçilen kaynak boş.")
             return
 
@@ -177,7 +189,8 @@ class DroppableGraphicsView(QGraphicsView):
         self.scene().removeItem(loading_proxy)
         del loading_proxy
         
-        print(f"HATA: Önizleme verisi çekilemedi: {error_message}")
+        # --- DEĞİŞİKLİK (print -> logger.error) ---
+        logger.error(f"HATA: Önizleme verisi çekilemedi: {error_message}")
         QMessageBox.critical(self, "Önizleme Hatası", 
                              f"Veri önizlemesi alınırken bir hata oluştu:\n{error_message}")
         

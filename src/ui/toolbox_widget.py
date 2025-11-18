@@ -1,13 +1,17 @@
 # src/ui/toolbox_widget.py
 
 import os
-# --- DÜZELTME 1: Gerekli import'ları (QStyle dahil) ekleyin ---
+import logging  
+# --- 1: Gerekli import'ları (QStyle dahil)---
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QListWidget, QListWidgetItem, 
     QAbstractItemView, QStyle 
 )
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, QMimeData
+
+# <-- 2. Modüle özel logger'ı tanımlayın
+logger = logging.getLogger(__name__)
 
 class ToolboxWidget(QWidget):
     """
@@ -35,13 +39,13 @@ class ToolboxWidget(QWidget):
         self.toolList.mimeData = self.mimeData
         
         self._populate_tools()
+        logger.debug("ToolboxWidget başlatıldı ve araçlar yüklendi.") # <-- LOG
 
     def _populate_tools(self):
         """Araç kutusuna eklenecek öğeleri tanımlar."""
         
         # 1. Başlık (Label) Aracı
         label_item = QListWidgetItem("Başlık (Metin)")
-        # QStyle artık import edildiği için bu satır çalışacaktır
         label_item.setIcon(self.style().standardIcon(
             QStyle.StandardPixmap.SP_TitleBarMenuButton 
         ))
@@ -58,16 +62,13 @@ class ToolboxWidget(QWidget):
         
         # 3. Çizgi Aracı
         line_item = QListWidgetItem("Yatay Çizgi")
-        
-        # --- DÜZELTME 2: 'SP_SplitterHandleHorizontal' geçersizdi. ---
-        # Bunun yerine 'SP_ArrowRight' gibi geçerli bir ikon kullanalım.
         line_item.setIcon(self.style().standardIcon(
             QStyle.StandardPixmap.SP_ArrowRight 
         ))
         line_item.setData(Qt.ItemDataRole.UserRole, "__TOOL_LINE__")
         self.toolList.addItem(line_item)
 
-    # --- Sürükleme Mantığı (Değişiklik yok) ---
+    # --- Sürükleme Mantığı ---
     def mimeTypes(self):
         """Bu widget'ın hangi formatı sürüklediğini belirtir."""
         return [self.TOOLBOX_MIME_TYPE, "text/plain"]
@@ -78,11 +79,13 @@ class ToolboxWidget(QWidget):
         
         if items:
             item = items[0] 
-            tool_type = item.data(Qt.ItemDataRole.UserRole) # "__TOOL_LABEL__" vb.
+            tool_type = item.data(Qt.ItemDataRole.UserRole) 
             
             if tool_type:
                 mime_data.setData(self.TOOLBOX_MIME_TYPE, tool_type.encode('utf-8'))
                 mime_data.setText(tool_type) 
-                print(f"Araç Kutusu: Sürükleme başladı. Taşınan veri: {tool_type}")
+                
+                
+                logger.debug(f"Araç Kutusu: Sürükleme başladı. Taşınan veri: {tool_type}")
                 
         return mime_data
