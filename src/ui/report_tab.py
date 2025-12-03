@@ -449,7 +449,7 @@ class ReportTabWidget(QWidget):
 
         self.tbl_Veri.setRowCount(len(df))
         self.tbl_Veri.setColumnCount(len(df.columns))
-        self.tbl_Veri.setHorizontalHeaderLabels(df.columns)
+        self.tbl_Veri.setHorizontalHeaderLabels(df.columns.astype(str))
 
         for i in range(len(df)):
             for j in range(len(df.columns)):

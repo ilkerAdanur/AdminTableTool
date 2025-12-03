@@ -1,9 +1,8 @@
 # src/core/file_exporter.py
 
 import os
+import pandas as pd
 
-
-# PDF ile ilgili tüm importları buraya taşıyoruz
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
 from reportlab.lib.pagesizes import landscape, A4
 from reportlab.lib import colors
@@ -53,10 +52,71 @@ def get_yeni_kayit_yolu(format, start_date_obj, end_date_obj, target_table, temp
         print(f"Kayıt yolu oluşturulurken hata: {e}")
         return None # Hata durumunda None döndür
 
+
 def task_run_excel(kayit_yolu, df_to_save):
-    """(Worker Görevi) ARKA PLANDA çalışacak Excel kaydetme işi."""
+    """(Worker Görevi) Excel kaydetme işi. Özet satırlarını en üste ekler."""
     print(f"Çalışan iş parçacığı: Excel kaydetme başlatıldı -> {kayit_yolu}")
-    df_to_save.to_excel(kayit_yolu, index=False)
+    
+    # MultiIndex Sütunları Düzleştir
+    df_export = df_to_save.copy()
+    if isinstance(df_export.columns, pd.MultiIndex):
+        df_export.columns = ['_'.join(map(str, col)).strip() for col in df_export.columns.values]
+    
+    # 1. Özet Verilerini Hesapla (LİSTE YÖNTEMİYLE)
+    summary_data = []
+    summary_index = ["TOPLAM", "ORTALAMA", "MAKSİMUM", "MİNİMUM"]
+    funcs = ['sum', 'mean', 'max', 'min']
+    
+    for func in funcs:
+        # Sözlük {} YERİNE Liste [] kullanıyoruz ki aynı isimler ezilmesin
+        row_values = [] 
+        
+        for col in df_export.columns:
+            # Index sütununu (Tarih) atla (Boş bırak)
+            if col == df_export.index.name: 
+                row_values.append(None)
+                continue
+            
+            # Güvenli dönüşüm ve hesaplama
+            try:
+                series = pd.to_numeric(df_export[col].values, errors='coerce')
+                
+                if pd.isna(series).all():
+                    row_values.append(None)
+                else:
+                    if func == 'sum': val = pd.Series(series).sum()
+                    elif func == 'mean': val = pd.Series(series).mean()
+                    elif func == 'max': val = pd.Series(series).max()
+                    elif func == 'min': val = pd.Series(series).min()
+                    else: val = None
+                    row_values.append(val)
+            except:
+                row_values.append(None)
+
+        summary_data.append(row_values)
+        
+    # Özet DataFrame'i oluştur (Sütunlar df_export ile aynı sırada ve sayıda)
+    df_summary = pd.DataFrame(summary_data, columns=df_export.columns, index=summary_index)
+    
+    if df_export.index.name:
+        df_summary.index.name = df_export.index.name 
+    
+    # 2. Excel Yazıcıyı Başlat
+    with pd.ExcelWriter(kayit_yolu, engine='xlsxwriter') as writer:
+        workbook = writer.book
+        worksheet = workbook.add_worksheet('Rapor')
+        
+        # Formatlar
+        bold_format = workbook.add_format({'bold': True, 'align': 'right'})
+        
+        # A. Özet Tablosunu Yaz (Satır 0)
+        df_summary.to_excel(writer, sheet_name='Rapor', startrow=0, header=False)
+        
+        # B. Asıl Veriyi Yaz (Satır 5)
+        df_export.to_excel(writer, sheet_name='Rapor', startrow=5)
+        
+        worksheet.set_column(0, 0, 20) 
+        
     print("Çalışan iş parçacığı: Excel kaydetme bitti.")
     return kayit_yolu
 

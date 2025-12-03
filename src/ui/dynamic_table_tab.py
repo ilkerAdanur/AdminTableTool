@@ -18,7 +18,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QDate
 from src.core.tasks import run_dynamic_report_task 
 from src.core.file_exporter import task_run_excel, get_yeni_kayit_yolu 
 from src.threading.workers import Worker
-from PyQt6.QtGui import QKeySequence, QShortcut
+from PyQt6.QtGui import QColor, QFont
 
 # <-- 2. Modüle özel logger'ı tanımlayın
 logger = logging.getLogger(__name__)
@@ -172,13 +172,11 @@ class DynamicTableTab(QWidget):
             self.agg_type_combo.currentIndexChanged.connect(self.mark_as_unsaved)
 
             # --- YENİ: Ctrl+S Kısayolu ---
-            self.save_shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
-            self.save_shortcut.activated.connect(self.save_file)
+            
 
             logger.debug("DynamicTableTab başlatıldı (Kayıt özelliği aktif).")
             
 
-            logger.debug("DynamicTableTab başlatıldı.")
 
 
 
@@ -444,43 +442,130 @@ class DynamicTableTab(QWidget):
         logger.error(f"Rapor hatası: {error_message}")
         QMessageBox.critical(self, "Hata", f"Rapor hatası:\n{error_message}")
 
+
     def _populate_table(self, df):
         self.table.setUpdatesEnabled(False)
         self.table.setSortingEnabled(False)
         self.table.setRowCount(0) 
 
+        if df.empty:
+            logger.debug("DataFrame boş, tablo temizlendi.") 
+            self.table.setSortingEnabled(True)
+            self.table.setUpdatesEnabled(True)
+            return
+
+        # --- 1. Tarih index ise onu da sütun gibi düşün ---
         has_date_index = (df.index.name is not None)
+        
         header_labels = list(df.columns)
         col_offset = 0
-
-        if has_date_index:
-            header_labels.insert(0, df.index.name) 
-            col_offset = 1
-            self.table.setColumnCount(len(df.columns) + 1 + 1) 
-            self.table.setHorizontalHeaderLabels(header_labels + ["[Yeni Sütun Ekle]"])
-        else:
-            self.refresh_table_headers() # Ham veride headerları koru
         
-        self.table.setRowCount(len(df))
+        if has_date_index:
+            header_labels.insert(0, df.index.name if df.index.name else "Tarih")
+            col_offset = 1 
+            
+        self.table.setColumnCount(len(header_labels) + 1) 
+        self.table.setHorizontalHeaderLabels(header_labels + ["[Yeni Sütun Ekle]"])
+
+        # --- 2. ÖZET SATIRLARI YAPILANDIRMASI ---
+        summary_rows_config = [
+            {"label": "TOPLAM",   "func": "sum",  "color": "#FFF176"}, # Sarı
+            {"label": "ORTALAMA", "func": "mean", "color": "#FFF59D"}, # Açık Sarı
+            {"label": "MAKSİMUM", "func": "max",  "color": "#A5D6A7"}, # Açık Yeşil
+            {"label": "MİNİMUM",  "func": "min",  "color": "#EF9A9A"}  # Açık Kırmızı
+        ]
+        
+        num_summary_rows = len(summary_rows_config)
+        
+        # Toplam Satır Sayısı = Özet Satırları + Veri Satırları
+        self.table.setRowCount(num_summary_rows + len(df))
+
+        # --- 3. ÖZET SATIRLARINI OLUŞTUR ---
+        for row_idx, config in enumerate(summary_rows_config):
+            label = config["label"]
+            func_name = config["func"]
+            bg_color = QColor(config["color"])
+            font = QFont("Arial", 10, QFont.Weight.Bold)
+
+            # Sol Başlık (Özet İsimleri)
+            v_header_item = QTableWidgetItem(label)
+            v_header_item.setBackground(bg_color)
+            self.table.setVerticalHeaderItem(row_idx, v_header_item)
+
+            # Tarih Sütununa Etiket (0. sütun)
+            item_label = QTableWidgetItem(label)
+            item_label.setFont(font)
+            item_label.setBackground(bg_color)
+            item_label.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.table.setItem(row_idx, 0, item_label)
+
+            # Veri Sütunları Hesaplama
+            for j in range(len(df.columns)):
+                series = df.iloc[:, j]
+                numeric_series = pd.to_numeric(series, errors='coerce')
+                
+                if numeric_series.notna().any():
+                    try:
+                        val = numeric_series.agg(func_name)
+                        if pd.isna(val):
+                            display_text = "-"
+                        elif val % 1 == 0:
+                            display_text = f"{int(val)}"
+                        else:
+                            display_text = f"{val:.2f}"
+                        
+                        item = QTableWidgetItem(display_text)
+                        item.setData(Qt.ItemDataRole.EditRole, float(val) if not pd.isna(val) else 0)
+                    except:
+                        item = QTableWidgetItem("-")
+                else:
+                    item = QTableWidgetItem("-")
+                
+                item.setFont(font)
+                item.setBackground(bg_color)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                self.table.setItem(row_idx, j + col_offset, item)
+
+        # --- 4. ASIL VERİ SATIRLARINI EKLE ---
         for i in range(len(df)):
+            table_row = i + num_summary_rows
+            
+            # --- DÜZELTME: Sol Başlığı (Numara) 1'den Başlat ---
+            v_header_num = QTableWidgetItem(str(i + 1))
+            self.table.setVerticalHeaderItem(table_row, v_header_num)
+            # ---------------------------------------------------
+            
             if has_date_index:
                 idx = df.index[i]
-                val = str(idx.strftime('%Y-%m-%d')) if hasattr(idx, 'strftime') else str(idx)
-                self.table.setItem(i, 0, QTableWidgetItem(val))
+                val_str = str(idx.strftime('%Y-%m-%d %H:%M:%S')) if hasattr(idx, 'strftime') else str(idx)
+                self.table.setItem(table_row, 0, QTableWidgetItem(val_str))
 
-            for j in range(len(df.columns)): 
+            for j in range(len(df.columns)):
                 raw_val = df.iloc[i, j]
                 item = QTableWidgetItem()
-                if isinstance(raw_val, (int, float)):
-                    item.setData(Qt.ItemDataRole.EditRole, float(raw_val))
-                    try: item.setData(Qt.ItemDataRole.DisplayRole, f"{raw_val:.2f}")
-                    except: item.setData(Qt.ItemDataRole.DisplayRole, str(raw_val))
+                
+                try:
+                    float_val = float(raw_val)
+                    is_numeric = True
+                except (ValueError, TypeError):
+                    is_numeric = False
+                
+                if is_numeric and not pd.isna(raw_val):
+                    item.setData(Qt.ItemDataRole.EditRole, float_val)
+                    if float_val % 1 == 0:
+                        item.setData(Qt.ItemDataRole.DisplayRole, f"{int(float_val)}")
+                    else:
+                        item.setData(Qt.ItemDataRole.DisplayRole, f"{float_val:.2f}")
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 else:
-                    item.setData(Qt.ItemDataRole.DisplayRole, str(raw_val))
-                self.table.setItem(i, j + col_offset, item) 
+                    item.setData(Qt.ItemDataRole.DisplayRole, str(raw_val) if not pd.isna(raw_val) else "")
+                
+                self.table.setItem(table_row, j + col_offset, item)
 
         self.table.setSortingEnabled(True)
         self.table.setUpdatesEnabled(True)
+
+
     def _populate_date_columns(self): # (Bu fonksiyonun kopyası sonda kalmış, yukarıdaki ile aynı)
         self.date_column_combo.blockSignals(True)
         self.date_column_combo.clear()
