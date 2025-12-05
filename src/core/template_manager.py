@@ -3,7 +3,9 @@
 import os
 import json
 import json.decoder  # Hata yakalama için eklendi
+import logging
 
+logger = logging.getLogger(__name__)
 # --- KALDIRILDI ---
 # from PyQt6.QtWidgets import QFileDialog, QMessageBox
 
@@ -39,11 +41,11 @@ def save_template(template_name, template_data):
     try:
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(template_data, f, ensure_ascii=False, indent=4)
-        print(f"Taslak başarıyla kaydedildi: {file_path}")
+        logger.info(f"Taslak başarıyla kaydedildi: {file_path}")
         # Başarılı olunca return True'ye gerek yok, hatasız bitmesi yeterli.
     
     except Exception as e:
-        print(f"HATA: Taslak kaydedilemedi: {e}")
+        logger.warning(f"HATA: Taslak kaydedilemedi: {e}")
         # --- DEĞİŞİKLİK ---
         # QMessageBox göstermek yerine, bir hata fırlatıyoruz.
         raise IOError(f"Kayıt Hatası: Taslak kaydedilirken bir hata oluştu: {e}")
@@ -79,19 +81,19 @@ def load_template(template_name):
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             template_data = json.load(f)
-        print(f"Taslak başarıyla yüklendi: {file_path}")
+        logger.info(f"Taslak başarıyla yüklendi: {file_path}")
 
         loaded_name = os.path.splitext(os.path.basename(file_path))[0]
         template_data['_template_name'] = loaded_name 
         return template_data
     
     except json.JSONDecodeError as e:
-        print(f"HATA: Taslak dosyası bozuk (JSON): {e}")
+        logger.warning(f"HATA: Taslak dosyası bozuk (JSON): {e}")
         # --- DEĞİŞİKLİK ---
         raise json.JSONDecodeError(f"Yükleme Hatası: Taslak dosyası okunamadı (Bozuk JSON):\n{file_path}\n{e.msg}", e.doc, e.pos)
     
     except Exception as e:
-        print(f"HATA: Taslak yüklenemedi: {e}")
+        logger.warning(f"HATA: Taslak yüklenemedi: {e}")
         # --- DEĞİŞİKLİK ---
         raise IOError(f"Yükleme Hatası: Taslak yüklenirken bilinmeyen bir hata oluştu: {e}")
 
@@ -106,18 +108,18 @@ def load_template_from_path(file_path):
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             template_data = json.load(f)
-        print(f"Taslak başarıyla yüklendi: {file_path}")
+        logger.info(f"Taslak başarıyla yüklendi: {file_path}")
 
         loaded_name = os.path.splitext(os.path.basename(file_path))[0]
         template_data['_template_name'] = loaded_name 
         return template_data
     
     except json.JSONDecodeError as e:
-        print(f"HATA: Taslak dosyası bozuk (JSON): {e}")
+        logger.warning(f"HATA: Taslak dosyası bozuk (JSON): {e}")
         raise json.JSONDecodeError(f"Yükleme Hatası: Taslak dosyası okunamadı (Bozuk JSON):\n{file_path}\n{e.msg}", e.doc, e.pos)
     
     except Exception as e:
-        print(f"HATA: Taslak yüklenemedi: {e}")
+        logger.warning(f"HATA: Taslak yüklenemedi: {e}")
         raise IOError(f"Yükleme Hatası: Taslak yüklenirken bilinmeyen bir hata oluştu: {e}")
 
 
@@ -136,5 +138,5 @@ def get_available_templates():
         templates.sort() 
         return templates
     except Exception as e:
-        print(f"HATA: Taslak listesi alınamadı: {e}")
+        logger.warning(f"HATA: Taslak listesi alınamadı: {e}")
         return []

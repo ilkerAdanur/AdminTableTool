@@ -11,14 +11,14 @@ from datetime import datetime # get_yeni_kayit_yolu için gerekli
 from PyQt6.QtWidgets import (
     QWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, 
     QHeaderView, QMenu, QMessageBox, QInputDialog,
-    QLabel, QLineEdit, QHBoxLayout, QDateEdit, QPushButton, QComboBox,QFileDialog
+    QLabel, QLineEdit, QHBoxLayout, QDateEdit, QPushButton, QComboBox,QFileDialog, QSizePolicy
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QDate
 
 from src.core.tasks import run_dynamic_report_task 
 from src.core.file_exporter import task_run_excel, get_yeni_kayit_yolu 
 from src.threading.workers import Worker
-from PyQt6.QtGui import QColor, QFont
+from PyQt6.QtGui import QColor, QFont, QPixmap,QDropEvent, QDragEnterEvent
 
 # <-- 2. Modüle özel logger'ı tanımlayın
 logger = logging.getLogger(__name__)
@@ -58,7 +58,6 @@ class DroppableHeaderView(QHeaderView):
         self.columns_dropped.emit(dropped_columns, target_index)
         event.acceptProposedAction()
 
-
 class DynamicTableWidget(QTableWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -88,7 +87,70 @@ class DynamicTableWidget(QTableWidget):
         self.horizontalHeader().columns_dropped.emit(dropped_columns, target_index)
         event.acceptProposedAction()
 
+class DraggableImageLabel(QLabel):
+    """Resim sürüklenip bırakılabilen özel etiket."""
+    imageDropped = pyqtSignal(str) # Resim yolu sinyali
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setText("Rapor Logosu / Resmi\n(Sürükle & Bırak)")
+        self.setStyleSheet("""
+            QLabel {
+                border: 2px dashed #aaa;
+                border-radius: 5px;
+                color: #555;
+                background-color: #f9f9f9;
+            }
+            QLabel:hover {
+                background-color: #eee;
+                border-color: #777;
+            }
+        """)
+        self.setAcceptDrops(True)
+        self.setFixedHeight(100) # Sabit yükseklik
+        self.current_image_path = None
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        if event.mimeData().hasUrls():
+            event.accept()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event: QDropEvent):
+        urls = event.mimeData().urls()
+        if urls:
+            file_path = urls[0].toLocalFile()
+            if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')):
+                self.set_image(file_path)
+                self.imageDropped.emit(file_path) # Ana pencereye bildir
+            else:
+                QMessageBox.warning(self, "Hata", "Lütfen geçerli bir resim dosyası sürükleyin.")
+
+    def set_image(self, path):
+        """Resmi yükler ve ölçekler."""
+        if path and os.path.exists(path):
+            self.current_image_path = path
+            pixmap = QPixmap(path)
+            # Resmi etiketin yüksekliğine göre ölçekle (oranı koru)
+            scaled_pixmap = pixmap.scaledToHeight(self.height() - 10, Qt.TransformationMode.SmoothTransformation)
+            self.setPixmap(scaled_pixmap)
+            self.setStyleSheet("border: none; background-color: transparent;") # Çerçeveyi kaldır
+        else:
+            self.clear_image()
+
+    def clear_image(self):
+        self.current_image_path = None
+        self.clear()
+        self.setText("Rapor Logosu / Resmi\n(Sürükle & Bırak)")
+        self.setStyleSheet("""
+            QLabel {
+                border: 2px dashed #aaa;
+                border-radius: 5px;
+                color: #555;
+                background-color: #f9f9f9;
+            }
+        """)
 
 class DynamicTableTab(QWidget):
     """
@@ -103,6 +165,8 @@ class DynamicTableTab(QWidget):
 
             self.current_file_path = None  # Kayıtlı dosyanın yolu
             self.is_unsaved = False        # Değişiklik var mı?
+
+            self.header_image_path = None
 
             layout = QVBoxLayout(self)
             layout.setContentsMargins(5, 5, 5, 5) 
@@ -151,6 +215,10 @@ class DynamicTableTab(QWidget):
             controls_layout.addWidget(self.btn_export_excel)
 
             layout.addLayout(controls_layout) 
+            
+            self.image_label = DraggableImageLabel()
+            self.image_label.imageDropped.connect(self.handle_image_drop)
+            layout.addWidget(self.image_label)
 
             # --- TABLO ---
             self.table = DynamicTableWidget(self)
@@ -171,16 +239,13 @@ class DynamicTableTab(QWidget):
             self.date_column_combo.currentIndexChanged.connect(self.mark_as_unsaved)
             self.agg_type_combo.currentIndexChanged.connect(self.mark_as_unsaved)
 
-            # --- YENİ: Ctrl+S Kısayolu ---
             
 
             logger.debug("DynamicTableTab başlatıldı (Kayıt özelliği aktif).")
-            
 
-
-
-
-
+    def handle_image_drop(self, path):
+        self.header_image_path = path
+        self.mark_as_unsaved()
     def mark_as_unsaved(self):
         """Bir değişiklik yapıldığında çağrılır. Sekme adına '*' ekler."""
         if not self.is_unsaved:
@@ -233,7 +298,8 @@ class DynamicTableTab(QWidget):
                 "end_date": self.date_Bitis.date().toString("yyyy-MM-dd"),
                 "date_column": self.date_column_combo.currentText(), # Text olarak sakla
                 "agg_type": self.agg_type_combo.currentText(),
-                "defined_columns": self.defined_columns
+                "defined_columns": self.defined_columns,
+                "header_image": self.header_image_path
             }
             
             with open(file_path, 'w', encoding='utf-8') as f:
@@ -272,6 +338,14 @@ class DynamicTableTab(QWidget):
             self.defined_columns = data["defined_columns"]
             self.refresh_table_headers()
             
+            img_path = data.get("header_image")
+            if img_path and os.path.exists(img_path):
+                self.header_image_path = img_path
+                self.image_label.set_image(img_path)
+            else:
+                self.header_image_path = None
+                self.image_label.clear_image()
+
             # 4. Dosya yolunu sakla ve başlığı güncelle
             self.current_file_path = file_path
             self.mark_as_saved()
@@ -454,7 +528,7 @@ class DynamicTableTab(QWidget):
             self.table.setUpdatesEnabled(True)
             return
 
-        # --- 1. Tarih index ise onu da sütun gibi düşün ---
+        # Tarih index ise onu da sütun gibi düşün
         has_date_index = (df.index.name is not None)
         
         header_labels = list(df.columns)
@@ -467,7 +541,7 @@ class DynamicTableTab(QWidget):
         self.table.setColumnCount(len(header_labels) + 1) 
         self.table.setHorizontalHeaderLabels(header_labels + ["[Yeni Sütun Ekle]"])
 
-        # --- 2. ÖZET SATIRLARI YAPILANDIRMASI ---
+        # Özet Satırları Yapılandırması
         summary_rows_config = [
             {"label": "TOPLAM",   "func": "sum",  "color": "#FFF176"}, # Sarı
             {"label": "ORTALAMA", "func": "mean", "color": "#FFF59D"}, # Açık Sarı
@@ -476,74 +550,88 @@ class DynamicTableTab(QWidget):
         ]
         
         num_summary_rows = len(summary_rows_config)
-        
-        # Toplam Satır Sayısı = Özet Satırları + Veri Satırları
         self.table.setRowCount(num_summary_rows + len(df))
 
-        # --- 3. ÖZET SATIRLARINI OLUŞTUR ---
+        # --- 1. ÖZET SATIRLARINI OLUŞTUR ---
         for row_idx, config in enumerate(summary_rows_config):
             label = config["label"]
             func_name = config["func"]
             bg_color = QColor(config["color"])
             font = QFont("Arial", 10, QFont.Weight.Bold)
 
-            # Sol Başlık (Özet İsimleri)
+            # Sol Başlık
             v_header_item = QTableWidgetItem(label)
             v_header_item.setBackground(bg_color)
             self.table.setVerticalHeaderItem(row_idx, v_header_item)
 
-            # Tarih Sütununa Etiket (0. sütun)
-            item_label = QTableWidgetItem(label)
+            # Tarih/Index Sütunu (Boş Bırak veya Etiket Yaz)
+            # İsteğinize göre burayı boş bırakıyoruz ki tarih toplanmasın
+            item_label = QTableWidgetItem(label) if col_offset == 0 else QTableWidgetItem("")
             item_label.setFont(font)
             item_label.setBackground(bg_color)
             item_label.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.table.setItem(row_idx, 0, item_label)
 
-            # Veri Sütunları Hesaplama
+            # Veri Sütunlarını Hesapla
             for j in range(len(df.columns)):
+                # DÜZELTME 1: Sadece veriye odaklan (Sütun adını yok say)
                 series = df.iloc[:, j]
-                numeric_series = pd.to_numeric(series, errors='coerce')
                 
-                if numeric_series.notna().any():
-                    try:
-                        val = numeric_series.agg(func_name)
-                        if pd.isna(val):
-                            display_text = "-"
-                        elif val % 1 == 0:
-                            display_text = f"{int(val)}"
-                        else:
-                            display_text = f"{val:.2f}"
-                        
-                        item = QTableWidgetItem(display_text)
-                        item.setData(Qt.ItemDataRole.EditRole, float(val) if not pd.isna(val) else 0)
-                    except:
-                        item = QTableWidgetItem("-")
+                # DÜZELTME 2: Tarih kontrolü
+                # Eğer veri tipi tarih ise veya obje olup tarih içeriyorsa atla
+                if pd.api.types.is_datetime64_any_dtype(series):
+                    display_text = "" # Tarihleri toplama, boş bırak
                 else:
-                    item = QTableWidgetItem("-")
-                
+                    # DÜZELTME 3: .values kullanarak saf diziye çevir (Çakışmayı önler)
+                    numeric_values = pd.to_numeric(series.values, errors='coerce')
+                    
+                    # Eğer hepsi NaN değilse (en az 1 sayı varsa)
+                    if not pd.isna(numeric_values).all():
+                        try:
+                            # Numpy array üzerinde hesapla
+                            series_temp = pd.Series(numeric_values)
+                            val = series_temp.agg(func_name)
+                            
+                            if pd.isna(val):
+                                display_text = ""
+                            elif val % 1 == 0:
+                                display_text = f"{int(val)}"
+                            else:
+                                display_text = f"{val:.2f}"
+                        except:
+                            display_text = ""
+                    else:
+                        display_text = "" # Sayısal değilse boş bırak
+
+                # Hücreyi oluştur
+                item = QTableWidgetItem(display_text)
+                # Sıralama için data set et (Boşsa 0 kabul etme, en alta atması için eksi sonsuz veya benzeri mantık kurabiliriz ama şimdilik boş)
                 item.setFont(font)
                 item.setBackground(bg_color)
                 item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                
                 self.table.setItem(row_idx, j + col_offset, item)
 
-        # --- 4. ASIL VERİ SATIRLARINI EKLE ---
+        # --- 2. ASIL VERİ SATIRLARINI EKLE ---
         for i in range(len(df)):
             table_row = i + num_summary_rows
             
-            # --- DÜZELTME: Sol Başlığı (Numara) 1'den Başlat ---
+            # Sol Numara (1'den başlar)
             v_header_num = QTableWidgetItem(str(i + 1))
             self.table.setVerticalHeaderItem(table_row, v_header_num)
-            # ---------------------------------------------------
             
+            # Tarih Hücresi
             if has_date_index:
                 idx = df.index[i]
                 val_str = str(idx.strftime('%Y-%m-%d %H:%M:%S')) if hasattr(idx, 'strftime') else str(idx)
                 self.table.setItem(table_row, 0, QTableWidgetItem(val_str))
 
+            # Veri Hücreleri
             for j in range(len(df.columns)):
                 raw_val = df.iloc[i, j]
                 item = QTableWidgetItem()
                 
+                # Sayısal kontrol
                 try:
                     float_val = float(raw_val)
                     is_numeric = True
@@ -565,7 +653,6 @@ class DynamicTableTab(QWidget):
         self.table.setSortingEnabled(True)
         self.table.setUpdatesEnabled(True)
 
-
     def _populate_date_columns(self): # (Bu fonksiyonun kopyası sonda kalmış, yukarıdaki ile aynı)
         self.date_column_combo.blockSignals(True)
         self.date_column_combo.clear()
@@ -583,7 +670,6 @@ class DynamicTableTab(QWidget):
                 self.date_column_combo.addItem(full_name, userData=full_name)
 
         except Exception as e:
-            # --- DEĞİŞİKLİK (print -> logger.error) ---
             logger.error(f"Hata: Tarih sütunları doldurulamadı: {e}", exc_info=True)
 
         self.date_column_combo.blockSignals(False)
@@ -597,9 +683,6 @@ class DynamicTableTab(QWidget):
         start_date_obj = self.date_Baslangic.date().toPyDate()
         end_date_obj = self.date_Bitis.date().toPyDate()
         
-        # Dosya adını belirle (Tablo Adı veya "OzelRapor")
-        # 'defined_columns'dan bir tablo adı tahmin etmeye çalışabiliriz veya "OzelRapor" deriz.
-        # Şimdilik "DinamikRapor" diyelim.
         target_name = "DinamikRapor"
         
         # Kayıt yolunu al (C:\rapor\excel\YIL\AY...)
@@ -624,7 +707,7 @@ class DynamicTableTab(QWidget):
         if df_to_save.index.name: # Eğer index varsa (Tarih) onu da sütun yap
             df_to_save.reset_index(inplace=True)
 
-        worker = Worker(task_run_excel, save_path, df_to_save)
+        worker = Worker(task_run_excel, save_path, df_to_save,header_image_path=self.header_image_path)
         
         # İşlem bitince main_window'daki sekme açma fonksiyonunu çağır
         worker.signals.finished.connect(

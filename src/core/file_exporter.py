@@ -2,10 +2,13 @@
 
 import os
 import pandas as pd
+import logging
 
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
 from reportlab.lib.pagesizes import landscape, A4
 from reportlab.lib import colors
+
+logger = logging.getLogger(__name__)
 
 def get_yeni_kayit_yolu(format, start_date_obj, end_date_obj, target_table, template_name=None):
     """
@@ -49,45 +52,55 @@ def get_yeni_kayit_yolu(format, start_date_obj, end_date_obj, target_table, temp
 
         return tam_dosya_yolu
     except Exception as e:
-        print(f"Kayıt yolu oluşturulurken hata: {e}")
+        logger.error(f"Kayıt yolu oluşturulurken hata: {e}", exc_info=True)
         return None # Hata durumunda None döndür
 
 
-def task_run_excel(kayit_yolu, df_to_save):
-    """(Worker Görevi) Excel kaydetme işi. Özet satırlarını en üste ekler."""
-    print(f"Çalışan iş parçacığı: Excel kaydetme başlatıldı -> {kayit_yolu}")
+# src/core/file_exporter.py
+
+def task_run_excel(kayit_yolu, df_to_save, header_image_path=None):
+    """(Worker Görevi) Excel kaydetme işi. Özetleri ve resmi ekler."""
+    logger.info(f"Çalışan iş parçacığı: Excel kaydetme başlatıldı -> {kayit_yolu}")
     
-    # MultiIndex Sütunları Düzleştir
+    # 1. MultiIndex Sütunları Düzleştir
     df_export = df_to_save.copy()
     if isinstance(df_export.columns, pd.MultiIndex):
         df_export.columns = ['_'.join(map(str, col)).strip() for col in df_export.columns.values]
     
-    # 1. Özet Verilerini Hesapla (LİSTE YÖNTEMİYLE)
+    # 2. Özet Verilerini Hesapla (LİSTE YÖNTEMİYLE)
     summary_data = []
     summary_index = ["TOPLAM", "ORTALAMA", "MAKSİMUM", "MİNİMUM"]
     funcs = ['sum', 'mean', 'max', 'min']
     
     for func in funcs:
-        # Sözlük {} YERİNE Liste [] kullanıyoruz ki aynı isimler ezilmesin
         row_values = [] 
         
-        for col in df_export.columns:
-            # Index sütununu (Tarih) atla (Boş bırak)
-            if col == df_export.index.name: 
+        for j in range(len(df_export.columns)):
+            series = df_export.iloc[:, j]
+
+            # --- DÜZELTME: İlk sütun (Genelde Tarih) ise ve tipi tarih/obje ise atla ---
+            # Sadece 0. sütun (Tarih) için kontrol etmek en güvenlisidir.
+            if j == 0: 
                 row_values.append(None)
                 continue
             
+            # Ayrıca tip kontrolü de yapalım (Her ihtimale karşı)
+            if pd.api.types.is_datetime64_any_dtype(series):
+                row_values.append(None)
+                continue
+
             # Güvenli dönüşüm ve hesaplama
             try:
-                series = pd.to_numeric(df_export[col].values, errors='coerce')
+                numeric_values = pd.to_numeric(series.values, errors='coerce')
                 
-                if pd.isna(series).all():
+                if pd.isna(numeric_values).all():
                     row_values.append(None)
                 else:
-                    if func == 'sum': val = pd.Series(series).sum()
-                    elif func == 'mean': val = pd.Series(series).mean()
-                    elif func == 'max': val = pd.Series(series).max()
-                    elif func == 'min': val = pd.Series(series).min()
+                    temp_series = pd.Series(numeric_values)
+                    if func == 'sum': val = temp_series.sum()
+                    elif func == 'mean': val = temp_series.mean()
+                    elif func == 'max': val = temp_series.max()
+                    elif func == 'min': val = temp_series.min()
                     else: val = None
                     row_values.append(val)
             except:
@@ -95,34 +108,41 @@ def task_run_excel(kayit_yolu, df_to_save):
 
         summary_data.append(row_values)
         
-    # Özet DataFrame'i oluştur (Sütunlar df_export ile aynı sırada ve sayıda)
+    # Özet DataFrame'i oluştur (Sütunlar df_export ile aynı)
     df_summary = pd.DataFrame(summary_data, columns=df_export.columns, index=summary_index)
     
-    if df_export.index.name:
-        df_summary.index.name = df_export.index.name 
-    
-    # 2. Excel Yazıcıyı Başlat
+    # 3. Excel Yazıcıyı Başlat
     with pd.ExcelWriter(kayit_yolu, engine='xlsxwriter') as writer:
         workbook = writer.book
         worksheet = workbook.add_worksheet('Rapor')
         
-        # Formatlar
-        bold_format = workbook.add_format({'bold': True, 'align': 'right'})
+        # --- RESİM YERLEŞTİRME VE SATIR KAYDIRMA ---
+        start_row_offset = 0
+        if header_image_path and os.path.exists(header_image_path):
+            try:
+                worksheet.insert_image('A1', header_image_path, {'x_scale': 0.8, 'y_scale': 0.8})
+                start_row_offset = 8 
+            except Exception as e:
+                logger.error(f"Excel'e resim eklenirken hata: {e}")
         
-        # A. Özet Tablosunu Yaz (Satır 0)
-        df_summary.to_excel(writer, sheet_name='Rapor', startrow=0, header=False)
+        # A. Özet Tablosunu Yaz
+        # header=False (Sütun başlıklarını yazma, çünkü asıl tabloda yazacağız)
+        df_summary.to_excel(writer, sheet_name='Rapor', startrow=start_row_offset, header=False)
         
-        # B. Asıl Veriyi Yaz (Satır 5)
-        df_export.to_excel(writer, sheet_name='Rapor', startrow=5)
+        # B. Asıl Veriyi Yaz (Özet + 1 satır boşluk sonrasına)
+        data_start_row = start_row_offset + 5 
+        df_export.to_excel(writer, sheet_name='Rapor', startrow=data_start_row, index=False) # index=False ÖNEMLİ
         
+        # Sütun Genişliği
         worksheet.set_column(0, 0, 20) 
         
-    print("Çalışan iş parçacığı: Excel kaydetme bitti.")
+    logger.info("Çalışan iş parçacığı: Excel kaydetme bitti.")
     return kayit_yolu
+
 
 def task_run_pdf(kayit_yolu, df_to_save):
     """(Worker Görevi) ARKA PLANDA çalışacak PDF kaydetme işi."""
-    print(f"Çalışan iş parçacığı: PDF kaydetme başlatıldı -> {kayit_yolu}")
+    logger.info(f"Çalışan iş parçacığı: PDF kaydetme başlatıldı -> {kayit_yolu}")
 
     doc = SimpleDocTemplate(kayit_yolu, pagesize=landscape(A4))
     data = [list(df_to_save.columns)] + df_to_save.values.tolist()
@@ -141,5 +161,5 @@ def task_run_pdf(kayit_yolu, df_to_save):
     ])
     table.setStyle(style)
     doc.build([table])
-    print("Çalışan iş parçacığı: PDF kaydetme bitti.")
+    logger.info("Çalışan iş parçacığı: PDF kaydetme bitti.")
     return kayit_yolu

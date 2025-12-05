@@ -6,7 +6,9 @@ Kaydedilmiş (Excel) raporları yönetmek için yardımcı fonksiyonlar.
 
 import os
 from datetime import datetime
+import logging
 
+logger = logging.getLogger(__name__)
 REPORT_DIR = r"C:\rapor\excel"
 
 def get_saved_report_dates():
@@ -14,12 +16,12 @@ def get_saved_report_dates():
     C:\rapor\excel klasörünü tarar ve bulunan YIL\GUN_AY klasörlerini
     sözlük olarak (ComboBox metni -> Klasör yolu) döndürür.
     """
-    print("Kaydedilmiş Excel raporları taranıyor...")
+    logger.info("Kaydedilmiş Excel raporları taranıyor...")
     
     report_folders = {} # "GUN_AY_YIL" -> "tam_klasor_yolu"
     
     if not os.path.exists(REPORT_DIR):
-        print(f"Rapor klasörü bulunamadı: {REPORT_DIR}")
+        logger.info(f"Rapor klasörü bulunamadı: {REPORT_DIR}")
         return {}
 
     try:
@@ -39,5 +41,5 @@ def get_saved_report_dates():
         return report_folders
         
     except Exception as e:
-        print(f"HATA: Kayıtlı raporlar taranırken hata: {e}")
+        logger.warning(f"HATA: Kayıtlı raporlar taranırken hata: {e}")
         return {}

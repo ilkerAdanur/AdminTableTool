@@ -3,6 +3,10 @@
 from venv import logger
 import pandas as pd
 import re
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def _prepare_formula(formula, source_columns):
     """
@@ -105,7 +109,7 @@ def apply_template(raw_df: pd.DataFrame, template_data: dict):
         if rename_map:
             final_df = final_df.rename(columns=rename_map)
     else:
-        print("UYARI: Taslakta geçerli sütun bulunamadı, ham veri döndürülüyor.")
+        logger.warning("Taslakta geçerli sütun bulunamadı, ham veri döndürülüyor.")
         return pd.DataFrame() 
 
     logger.info("Taslak başarıyla uygulandı.")
@@ -136,7 +140,7 @@ def process_daily_summary(raw_df: pd.DataFrame, settings: dict):
     try:
         # TARIH ve SAAT sütunları varsa (Access senaryosu)
         if "SAAT" in df.columns and date_col == "TARIH":
-            print("TARIH ve SAAT sütunları birleştiriliyor...")
+            logger.info("TARIH ve SAAT sütunları birleştiriliyor...")
             
             # Önce her iki sütunun da datetime olduğundan emin ol
             df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
@@ -159,19 +163,19 @@ def process_daily_summary(raw_df: pd.DataFrame, settings: dict):
             
         else:
              # Sadece tek bir tarih sütunu varsa (örn: PostgreSQL)
-             print(f"'{date_col}' sütunu datetime index olarak ayarlanıyor...")
+             logger.info(f"'{date_col}' sütunu datetime index olarak ayarlanıyor...")
              df['datetime_index'] = pd.to_datetime(df[date_col], errors='coerce')
              df.dropna(subset=['datetime_index'], inplace=True)
              
         df.set_index('datetime_index', inplace=True)
-        print("Datetime index başarıyla oluşturuldu.")
+        logger.info("Datetime index başarıyla oluşturuldu.")
         
     except Exception as e:
         # Hata mesajına hangi sütunla ilgili olduğunu ekle
         raise ValueError(f"'{date_col}' veya 'SAAT' sütunu geçerli bir tarihe/zamana dönüştürülemedi: {e}")
 
     # 3. İşlem Türüne Göre Toplama (Aggregation)
-    print(f"'{agg_type_str}' işlemi uygulanıyor...")
+    logger.info(f"'{agg_type_str}' işlemi uygulanıyor...")
     
     # 'D' = Günlük (Daily) frekans
     grouper = df.groupby(pd.Grouper(freq='D'))[data_col]
@@ -195,5 +199,5 @@ def process_daily_summary(raw_df: pd.DataFrame, settings: dict):
     summary_df = summary_df.loc[settings["start_date"]:settings["end_date"]]
     summary_df.index.name = "Tarih"
     
-    print("Günlük özetleme tamamlandı.")
+    logger.info("Günlük özetleme tamamlandı.")
     return summary_df

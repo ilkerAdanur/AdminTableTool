@@ -47,7 +47,7 @@ class DroppableGraphicsView(QGraphicsView):
 
         drag_text = event.mimeData().text().strip()
         drop_position = self.mapToScene(event.position().toPoint()) 
-        # --- DEĞİŞİKLİK (print -> logger.info) ---
+        
         logger.info(f"'{drag_text}' tuval üzerine bırakıldı (Pozisyon: {drop_position})")
 
         # Ana pencereden bağlantı ve şema bilgilerini al
@@ -82,7 +82,7 @@ class DroppableGraphicsView(QGraphicsView):
             item_type = "Table"
             table_name = drag_text
             column_name = None
-            # --- DEĞİŞİKLİK (print -> logger.debug) ---
+            
             logger.debug(f"Bırakılan: Tablo ({table_name})")
 
         elif len(parts) > 1:
@@ -91,7 +91,7 @@ class DroppableGraphicsView(QGraphicsView):
                 item_type = "Column"
                 table_name = potential_table_name
                 column_name = parts[-1]
-                # --- DEĞİŞİKLİK (print -> logger.debug) ---
+                
                 logger.debug(f"Bırakılan: Sütun ({table_name}.{column_name})")
 
         if item_type:
@@ -117,7 +117,6 @@ class DroppableGraphicsView(QGraphicsView):
 
             self.main_window.threadpool.start(worker)
         else:
-            # --- DEĞİŞİKLİK (print -> logger.warning) ---
             logger.warning(f"Anlaşılamayan sürükleme verisi: {drag_text}")
             event.ignore()
 
@@ -189,7 +188,6 @@ class DroppableGraphicsView(QGraphicsView):
         self.scene().removeItem(loading_proxy)
         del loading_proxy
         
-        # --- DEĞİŞİKLİK (print -> logger.error) ---
         logger.error(f"HATA: Önizleme verisi çekilemedi: {error_message}")
         QMessageBox.critical(self, "Önizleme Hatası", 
                              f"Veri önizlemesi alınırken bir hata oluştu:\n{error_message}")

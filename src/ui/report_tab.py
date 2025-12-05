@@ -144,7 +144,6 @@ class ReportTabWidget(QWidget):
         self.main_window.threadpool.start(worker)
 
     def _on_query_or_template_applied(self, processed_df):
-        # --- DEĞİŞİKLİK (print -> logger.info) ---
         logger.info(f"Sekme [{self.target_table}]: Veri alındı. {len(processed_df)} satır. Tablo dolduruluyor...")
         
         self.df = processed_df 

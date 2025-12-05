@@ -3,15 +3,17 @@
 import urllib.parse
 from sqlalchemy import create_engine, inspect
 import pandas as pd
+import logging
 
+logger = logging.getLogger(__name__)
 # Calamine motorunu kontrol et
 try:
     import python_calamine
     EXCEL_ENGINE = "calamine"
-    print("Hızlı Excel motoru (python-calamine) bulundu.")
+    logger.info("Hızlı Excel motoru (python-calamine) bulundu.")
 except ImportError:
     EXCEL_ENGINE = "openpyxl"
-    print("UYARI: 'python-calamine' kütüphanesi bulunamadı. Hızlı Excel okuma için 'openpyxl' kullanılacak.")
+    logger.warning("UYARI: 'python-calamine' kütüphanesi bulunamadı. Hızlı Excel okuma için 'openpyxl' kullanılacak.")
 
 def create_db_engine(config):
     """
@@ -64,16 +66,16 @@ def create_db_engine(config):
         with engine.connect() as conn:
             pass 
         
-        print(f"'{db_type}' veritabanına başarıyla bağlanıldı.")
+        logger.info(f"'{db_type}' veritabanına başarıyla bağlanıldı.")
         return engine
 
     except Exception as e:
-        print(f"HATA: '{db_type}' veritabanına bağlanılamadı. Hata: {e}")
+        logger.warning(f"HATA: '{db_type}' veritabanına bağlanılamadı. Hata: {e}")
         raise e
 
 def get_database_tables(config):
     """(Worker Görevi) Veritabanına bağlanır ve tablo isimlerini döndürür."""
-    print(f"Çalışan iş parçacığı: Tablo listesi çekiliyor -> {config.get('type')}")
+    logger.info(f"Çalışan iş parçacığı: Tablo listesi çekiliyor -> {config.get('type')}")
     
     engine = create_db_engine(config)
     inspector = inspect(engine)
@@ -104,7 +106,7 @@ def get_database_tables(config):
                 for table_name in tables_in_schema:
                     all_tables.append(f"{schema_name}.{table_name}")
 
-    print(f"Çalışan iş parçacığı: Bulunan tablolar: {all_tables}")
+    logger.info(f"Çalışan iş parçacığı: Bulunan tablolar: {all_tables}")
     return all_tables, engine
 
 def run_database_query(config, target_table, baslangic_tarihi, bitis_tarihi, date_column_name, columns_to_select=None):
@@ -113,7 +115,7 @@ def run_database_query(config, target_table, baslangic_tarihi, bitis_tarihi, dat
     columns_to_select None ise TÜM sütunları (*) çeker.
     """
     
-    print(f"Çalışan iş parçacığı: Sorgulama başlatıldı. Tablo: {target_table}, Tarih Sütunu: {date_column_name}")
+    logger.info(f"Çalışan iş parçacığı: Sorgulama başlatıldı. Tablo: {target_table}, Tarih Sütunu: {date_column_name}")
     
     engine = create_db_engine(config)
     db_type = config.get('type')
@@ -159,22 +161,22 @@ def run_database_query(config, target_table, baslangic_tarihi, bitis_tarihi, dat
             
     df = pd.read_sql(sql_query, engine, params=params)
     
-    print(f"Çalışan iş parçacığı: Sorgulama bitti. {len(df)} satır bulundu.")
+    logger.info(f"Çalışan iş parçacığı: Sorgulama bitti. {len(df)} satır bulundu.")
     return df
 
 
 def load_excel_file(tam_yol):
     """(Worker Görevi) Excel okuma işi"""
-    print(f"Çalışan iş parçacığı: Excel okuma başlatıldı -> {tam_yol}")
+    logger.info(f"Çalışan iş parçacığı: Excel okuma başlatıldı -> {tam_yol}")
     df = pd.read_excel(tam_yol, engine=EXCEL_ENGINE)
-    print(f"Çalışan iş parçacığı: Excel okuma bitti. {len(df)} satır bulundu.")
+    logger.info(f"Çalışan iş parçacığı: Excel okuma bitti. {len(df)} satır bulundu.")
     return df
 def run_preview_query(config, table_name, column_name=None, limit=10):
     """
     Bir tablo veya sütunun ilk 'limit' satırını çeker.
     column_name None ise, tüm sütunları (SELECT *) çeker.
     """
-    print(f"Çalışan iş parçacığı: Önizleme sorgusu başlatıldı. Tablo: {table_name}, Sütun: {column_name}")
+    logger.info(f"Çalışan iş parçacığı: Önizleme sorgusu başlatıldı. Tablo: {table_name}, Sütun: {column_name}")
 
     engine = create_db_engine(config)
     db_type = config.get('type')
@@ -203,7 +205,7 @@ def run_preview_query(config, table_name, column_name=None, limit=10):
 
     df = pd.read_sql(sql_query, engine)
 
-    print(f"Çalışan iş parçacığı: Önizleme sorgusu bitti. {len(df)} satır bulundu.")
+    logger.info(f"Çalışan iş parçacığı: Önizleme sorgusu bitti. {len(df)} satır bulundu.")
     return df
 
 def build_sql_query(db_type, table_name, date_column_name, columns_to_select_str="*"):

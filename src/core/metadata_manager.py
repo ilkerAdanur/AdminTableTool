@@ -3,7 +3,9 @@
 import os
 import json
 import datetime
+import logging
 
+logger = logging.getLogger(__name__)
 # Yorumların saklanacağı metaveri dosyasının adı
 METADATA_FILENAME = "report_metadata.json"
 
@@ -46,11 +48,11 @@ def save_report_comment(file_path, comment, user="default_user"):
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
 
-        print(f"Yorum '{file_name}' için başarıyla kaydedildi.")
+        logger.info(f"Yorum '{file_name}' için başarıyla kaydedildi.")
         return True
 
     except Exception as e:
-        print(f"HATA: Yorum kaydedilemedi: {e}")
+        logger.warning(f"HATA: Yorum kaydedilemedi: {e}")
         return False
 
 def load_report_comments(file_path):
@@ -72,7 +74,7 @@ def load_report_comments(file_path):
         return data.get(file_name, [])
 
     except Exception as e:
-        print(f"HATA: Yorumlar yüklenemedi: {e}")
+        logger.warning(f"HATA: Yorumlar yüklenemedi: {e}")
         return []
    
 

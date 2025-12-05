@@ -61,7 +61,7 @@ class MainWindow(QMainWindow):
         self.full_schema_data = {} # Bağlı DB'nin tam şeması
         
         self.threadpool = QThreadPool()
-        # --- DEĞİŞİKLİK (print -> logger.info) ---
+        
         logger.info(f"Multithreading için {self.threadpool.maxThreadCount()} adet iş parçacığı mevcut.")
         
         self.progress_dialog = None
@@ -124,7 +124,7 @@ class MainWindow(QMainWindow):
         try:
             self.dbExplorerDock.setWidget(self.db_explorer)
         except AttributeError as e:
-            # --- DEĞİŞİKLİK (print -> logger.error) ---
+            
             logger.error(f"HATA: 'arayuz.ui' dosyasında 'dbExplorerDock' QDockWidget'ı bulunamadı. {e}", exc_info=True)
             self.dbExplorerDock = QDockWidget("Veritabanı Gezgini (Hata)", self)
             self.dbExplorerDock.setWidget(self.db_explorer)
@@ -139,10 +139,10 @@ class MainWindow(QMainWindow):
             self.tabifyDockWidget(self.dbExplorerDock, self.tools_dock)
             self.dbExplorerDock.raise_()
         except ImportError:
-            # --- DEĞİŞİKLİK (print -> logger.warning) ---
+            
             logger.warning("UYARI: toolbox_widget.py bulunamadı.")
         except AttributeError as e:
-             # --- DEĞİŞİKLİK (print -> logger.error) ---
+            
              logger.error(f"HATA: Araç kutusu dock'u kurulamadı: {e}", exc_info=True)
 
     def _connect_signals(self):
@@ -220,7 +220,6 @@ class MainWindow(QMainWindow):
             self.mainTabWidget.setCurrentIndex(index)
             logger.info(f"Yeni sekme eklendi: '{tab_name}' (Tip: {file_type})") # <-- LOG
         else:
-            # --- DEĞİŞİKLİK (print -> logger.info) ---
             logger.info("Yeni dosya oluşturma iptal edildi.")
 
     def create_new_report_tab(self, table_name):
@@ -295,7 +294,6 @@ class MainWindow(QMainWindow):
     # --- Veritabanı Bağlantı Akışı ---
 
     def set_database_type(self, db_type):
-        # --- DEĞİŞİKLİK (print -> logger.info) ---
         logger.info(f"Veritabanı türü '{db_type}' olarak ayarlandı.")
         self.db_config = {'type': db_type}
         self.full_schema_data = {}
@@ -319,7 +317,7 @@ class MainWindow(QMainWindow):
             logger.info(f"Bağlantı ayarları kabul edildi ({self.db_config.get('type')}). Tablolar yükleniyor...") # <-- LOG
             self._load_tables_from_db()
         else:
-            # --- DEĞİŞİKLİK (print -> logger.info) ---
+            
             logger.info("Bağlantı ayarları iptal edildi.")
             self.db_config = {}
             self.db_explorer.clear_tree()
@@ -368,14 +366,13 @@ class MainWindow(QMainWindow):
             self._on_task_error("Veritabanı şeması okunamadı.")
             return
 
-        # --- DEĞİŞİKLİK (print -> logger.info) ---
         logger.info(f"Tam şema yüklendi. {len(full_schema_data)} tablo işlendi.")
         self.full_schema_data = full_schema_data
         
         try:
             self.db_explorer.populate_tree(self.db_config, self.full_schema_data)
         except Exception as e:
-            # --- DEĞİŞİKLİK (print -> logger.error) ---
+            
             logger.error(f"HATA: Veritabanı Gezgini doldurulamadı: {e}", exc_info=True)
 
         self.update_connection_status("Bağlandı. Gezginden bir tablo seçin.", is_connected=True)
@@ -407,11 +404,11 @@ class MainWindow(QMainWindow):
 
         if result == QDialog.DialogCode.Accepted: 
             template_data = dialog.get_template_data()
-            # --- DEĞİŞİKLİK (print -> logger.debug) --- (verbose veri)
+            
             logger.debug(f"Alınan Taslak Verisi: {template_data}")
             self._update_all_template_comboboxes()
         else:
-            # --- DEĞİŞİKLİK (print -> logger.info) ---
+            
             logger.info("Taslak Düzenleyici iptal edildi.")
 
     def _update_all_template_comboboxes(self):
@@ -437,7 +434,7 @@ class MainWindow(QMainWindow):
     def _show_daily_summary_dialog(self, source_columns):
         dialog = DailySummaryDialog(source_columns=source_columns, parent=self)
         dialog.exec() 
-        # --- DEĞİŞİKLİK (print -> logger.info) ---
+        
         logger.info("Günlük Özet Diyaloğu kapatıldı.")
 
     # --- Günlük Özet Worker Çağrıları ---
@@ -482,12 +479,12 @@ class MainWindow(QMainWindow):
         self.threadpool.start(worker)
 
     def _on_summary_finished(self, dialog_instance, summary_df):
-        # --- DEĞİŞİKLİK (print -> logger.info) ---
+        
         logger.info("Ana arayüz: Günlük özet alındı. Diyaloğa gönderiliyor.")
         dialog_instance.update_summary_table(summary_df)
 
     def _on_summary_error(self, dialog_instance, error_message):
-        # --- DEĞİŞİKLİK (print -> logger.error) ---
+        
         logger.error(f"Ana arayüz: Günlük özet hatası: {error_message}")
         self.show_loading_dialog(f"Özetleme Hatası: {error_message}", 3000)
         dialog_instance.update_summary_table(None) 
@@ -497,7 +494,7 @@ class MainWindow(QMainWindow):
     def _on_task_error(self, hata_mesaji):
         """(Callback) Herhangi bir Worker'da hata olursa çalışır."""
         self.close_loading_dialog()
-        # --- DEĞİŞİKLİK (print -> logger.error) ---
+        
         # exc_info=True, hatanın tam traceback'ini loga basar.
         logger.error(f"Ana arayüz: Görev hatası alındı: {hata_mesaji}", exc_info=True)
         QMessageBox.critical(self, "Hata", f"İşlem sırasında bir hata oluştu:\n\n{hata_mesaji}")
@@ -553,7 +550,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: QCloseEvent):
         """Ana pencere 'X' ile kapatıldığında çalışır."""
-        # --- DEĞİŞİKLİK (print -> logger.info) ---
+        
         logger.info("Kapanma sinyali alındı. Arka plan görevleri temizleniyor...")
         self.threadpool.clear()
         self.threadpool.waitForDone()
