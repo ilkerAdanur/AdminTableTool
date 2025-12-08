@@ -25,17 +25,23 @@ def get_saved_report_dates():
         return {}
 
     try:
+        # 1. Yıl Klasörlerini Gez (2023, 2024...)
         for yil_klasor in os.listdir(REPORT_DIR):
             yil_yolu = os.path.join(REPORT_DIR, yil_klasor)
+            
             if os.path.isdir(yil_yolu) and yil_klasor.isdigit():
                 
+                # 2. Gün_Ay Klasörlerini Gez (20_10, 14_10...)
                 for gun_ay_klasor in os.listdir(yil_yolu):
                     gun_ay_yolu = os.path.join(yil_yolu, gun_ay_klasor)
+                    
                     if os.path.isdir(gun_ay_yolu) and '_' in gun_ay_klasor:
                         
-                        # Klasörün içinde en az bir .xlsx dosyası varsa
+                        # Klasörün içinde en az bir .xlsx dosyası varsa listeye ekle
                         if any(f.endswith('.xlsx') for f in os.listdir(gun_ay_yolu)):
+                            # Görünen Ad: 20_10_2023
                             combo_text = f"{gun_ay_klasor}_{yil_klasor}"
+                            # Veri: C:\rapor\excel\2023\20_10
                             report_folders[combo_text] = gun_ay_yolu
                             
         return report_folders

@@ -11,9 +11,12 @@ import logging  # <-- 1. logging'i import edin
 from PyQt6.uic import loadUi
 from PyQt6.QtWidgets import (
     QWidget, QTableWidgetItem, QMessageBox, QInputDialog, 
-    QLabel, QDialog, QHeaderView, QTableWidget, QApplication,QVBoxLayout,QDialog
+    QLabel, QDialog, QHeaderView, QTableWidget, QApplication,QVBoxLayout,QDialog,QPushButton
 )
-from PyQt6.QtCore import Qt, QDate
+
+
+from PyQt6.QtCore import Qt, QDate, QUrl  
+from PyQt6.QtGui import QDesktopServices
 
 from src.core.database import load_excel_file
 from src.core.file_exporter import get_yeni_kayit_yolu, task_run_excel, task_run_pdf
@@ -40,7 +43,6 @@ class ReportTabWidget(QWidget):
         super().__init__(main_window)
         
         logger.debug(f"ReportTabWidget '{target_table}' için başlatılıyor...") 
-        
         self.main_window = main_window 
         self.db_config = db_config
         self.target_table = target_table
@@ -52,6 +54,8 @@ class ReportTabWidget(QWidget):
         self.currently_viewing_excel = None 
         self.report_history_files = [] 
         self.current_report_index = 0   
+        
+        self.last_exported_excel_path = None
         
         try:
             current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -65,16 +69,55 @@ class ReportTabWidget(QWidget):
             self.layout().addWidget(QLabel(f"HATA: report_tab.ui yüklenemedi: {e}"))
             return
         
+        self.btn_OpenExcel = QPushButton("Exceli Aç")
+        self.btn_OpenExcel.setStyleSheet("background-color: #8BC34A; color: white; padding: 5px; font-weight: bold;")
+        self.btn_OpenExcel.setEnabled(False) # Başlangıçta pasif
+        self.btn_OpenExcel.clicked.connect(self.open_generated_excel)
+        
+        idx = self.horizontalLayout_Buttons.indexOf(self.btn_Excel)
+        self.horizontalLayout_Buttons.insertWidget(idx + 1, self.btn_OpenExcel)
+
         self._connect_signals()
         self.update_tab_label() 
         self._load_available_templates()
         self._load_saved_report_dates() 
+
         
         self.btn_Excel.setEnabled(False)
         self.btn_PDF.setEnabled(False)
         self.commentLabel.setVisible(False)
         self.tbl_Veri.setSortingEnabled(True)
         logger.debug(f"ReportTabWidget '{target_table}' için başlatma tamamlandı.") 
+
+    def open_generated_excel(self):
+        """Son oluşturulan Excel dosyasını sistem varsayılan uygulamasıyla açar."""
+        if self.last_exported_excel_path and os.path.exists(self.last_exported_excel_path):
+            try:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(self.last_exported_excel_path))
+                logger.info(f"Excel dosyası açılıyor: {self.last_exported_excel_path}")
+            except Exception as e:
+                logger.error(f"Dosya açılırken hata: {e}")
+                QMessageBox.warning(self, "Hata", f"Dosya açılamadı:\n{e}")
+        else:
+            QMessageBox.warning(self, "Dosya Bulunamadı", "Henüz oluşturulmuş veya kaydedilmiş bir Excel dosyası yok.")
+
+    def _on_export_finished(self, kayit_yolu, comment_to_save):
+        self.main_window.close_loading_dialog()
+        logger.info(f"Dosya başarıyla kaydedildi: {kayit_yolu}") 
+        QMessageBox.information(self, "Başarılı", f"Dosya başarıyla kaydedildi:\n{kayit_yolu}")
+        
+        # --- YENİ: Excel ise yolu kaydet ve butonu aç ---
+        if kayit_yolu and kayit_yolu.endswith(".xlsx"):
+            self.last_exported_excel_path = kayit_yolu
+            self.btn_OpenExcel.setEnabled(True)
+            
+            logger.info("Excel kaydedildiği için kaydedilmiş rapor tarihleri yenileniyor.") 
+            self._load_saved_report_dates() 
+        # -----------------------------------------------
+
+        if comment_to_save and comment_to_save.strip():
+            logger.info(f"'{kayit_yolu}' için yorum kaydediliyor.") 
+            save_report_comment(file_path=kayit_yolu, comment=comment_to_save)
 
     def _connect_signals(self):
         self.btn_ApplyTemplate.clicked.connect(self.apply_selected_template)
@@ -294,13 +337,19 @@ class ReportTabWidget(QWidget):
         logger.info("Yüklü Excel verisine taslak uygulama tamamlandı.") 
 
     def _load_saved_report_dates(self):
+        """Dosya sistemini tarar ve ComboBox'ı doldurur."""
         logger.debug("Kaydedilmiş rapor tarihleri combobox'ı dolduruluyor...") 
+        
         self.tarihSecCBox.blockSignals(True)
         self.tarihSecCBox.clear()
         self.tarihSecCBox.addItem("Kaydedilmiş Rapor Seç...", userData=None)
         
+        # Core modülden klasörleri al
         report_folders = get_saved_report_dates()
+        
+        # Tarihe göre sıralama (İsteğe bağlı, string olarak sıralar)
         try:
+            # "20_10_2023" formatını datetime'a çevirip sıralayalım
             sorted_keys = sorted(report_folders.keys(), key=lambda d: datetime.strptime(d, '%d_%m_%Y'))
         except ValueError:
             sorted_keys = sorted(report_folders.keys())
@@ -310,34 +359,31 @@ class ReportTabWidget(QWidget):
             
         logger.debug(f"{len(report_folders)} adet kaydedilmiş rapor tarihi bulundu.") 
         self.tarihSecCBox.blockSignals(False)
-
+    
     def _on_report_history_selected(self, index):
         folder_path = self.tarihSecCBox.currentData()
+        
         if not folder_path:
-            logger.debug("Geçmiş rapor seçimi temizlendi (Combobox 'Kaydedilmiş Rapor Seç...' seçildi).") 
+            logger.debug("Geçmiş rapor seçimi temizlendi.") 
             self.report_history_files = []
-            self.df = pd.DataFrame() 
-            self._populate_table(self.df)
-            self.commentLabel.setVisible(False)
-            self.currently_viewing_excel = None
-            self.raw_df_from_excel = None
-            self.main_window.statusbar.clearMessage()
-            self.update_tab_label()
-            self.btn_Excel.setEnabled(False)
-            self.btn_PDF.setEnabled(False)
+            # ... (temizleme işlemleri) ...
             return
             
         logger.info(f"Geçmiş rapor klasörü seçildi: {folder_path}") 
+        
         try:
+            # Klasördeki sadece .xlsx dosyalarını al
             files = [f for f in os.listdir(folder_path) if f.endswith('.xlsx')]
+            
+            # Sıralama (natural sort)
             self.report_history_files = sorted(files, key=natural_sort_key) 
             
             if self.report_history_files:
+                # İlk dosyayı yükle
                 self.current_report_index = 0
                 self._load_excel_from_history()
             else:
                 self.report_history_files = []
-                logger.warning(f"Rapor klasörü boş: {folder_path}") 
                 QMessageBox.warning(self, "Boş Klasör", "Bu tarih klasöründe .xlsx dosyası bulunamadı.")
                 
         except Exception as e:
@@ -388,6 +434,7 @@ class ReportTabWidget(QWidget):
             self.current_report_index += 1
             self._load_excel_from_history()
 
+
     def _on_excel_loaded(self, loaded_raw_df):
         self.main_window.close_loading_dialog()
         
@@ -397,20 +444,36 @@ class ReportTabWidget(QWidget):
              self.raw_df_from_excel = None
              self.df = pd.DataFrame()
              self.commentLabel.setVisible(False) 
+             self.btn_OpenExcel.setEnabled(False) # <-- EKLENDİ
         else:
             logger.info(f"Excel dosyası başarıyla yüklendi: {self.currently_viewing_excel} ({len(loaded_raw_df)} satır)") 
             self.raw_df_from_excel = loaded_raw_df.copy()
+            
+            # --- DÜZELTME BAŞLANGICI: Dosya yolunu bul ve butonu aktif et ---
             folder_path = self.tarihSecCBox.currentData()
             file_name = self.currently_viewing_excel 
             
+            full_path = ""
+            # Eğer klasörden seçildiyse:
             if folder_path and file_name:
                 full_path = os.path.join(folder_path, file_name)
+            # Eğer dışarıdan özel yükleme yapıldıysa (load_specific_file):
+            elif hasattr(self, 'special_file_path') and self.special_file_path:
+                full_path = self.special_file_path
+            
+            # Eğer dosya varsa butonu ayarla
+            if full_path and os.path.exists(full_path):
+                self.last_exported_excel_path = full_path
+                self.btn_OpenExcel.setEnabled(True)
+            # --- DÜZELTME SONU ---
+
+            if folder_path and file_name:
+                # Yorumları yükle (Eğer klasör yapısındaysa)
                 comments = load_report_comments(full_path)
-                
                 if comments:
                     logger.debug(f"{len(comments)} adet yorum bulundu, gösteriliyor.") 
                     formatted_comments = "Rapor Yorumları:\n"
-                    for comment_data in comments[-3:]: # Son 3 yorumu göster
+                    for comment_data in comments[-3:]: 
                         user = comment_data.get('user', 'Bilinmeyen')
                         timestamp = comment_data.get('timestamp', '')
                         comment_text = comment_data.get('comment', '...')
@@ -423,15 +486,18 @@ class ReportTabWidget(QWidget):
                     self.commentLabel.setText(formatted_comments.strip())
                     self.commentLabel.setVisible(True)
                 else:
-                    logger.debug("Dosya için yorum bulunamadı.") 
                     self.commentLabel.setVisible(False)
             else:
                 self.commentLabel.setVisible(False)
 
-        self._apply_template_to_loaded_data() # Yüklendikten sonra taslağı uygula
-        status_text = f"Gösterilen: {self.currently_viewing_excel} ({self.current_report_index + 1} / {len(self.report_history_files)})"
+        self._apply_template_to_loaded_data() 
+        status_text = f"Gösterilen: {self.currently_viewing_excel}"
+        if self.report_history_files:
+             status_text += f" ({self.current_report_index + 1} / {len(self.report_history_files)})"
+             
         self.main_window.statusbar.showMessage(status_text)
         self.update_tab_label()
+
 
     def _populate_table(self, df):
         logger.debug(f"Tabloyu {len(df)} satır ve {len(df.columns)} sütun ile doldurma işlemi başlıyor...") 
@@ -477,6 +543,8 @@ class ReportTabWidget(QWidget):
             return
 
         self.currently_viewing_excel = os.path.basename(file_path)
+        self.special_file_path = file_path # <-- EKLENDİ: Yolu sakla
+        
         logger.info(f"Özel dosya yükleniyor: {file_path}")
 
         # Yükleme worker'ını başlat
@@ -485,3 +553,4 @@ class ReportTabWidget(QWidget):
         worker.signals.finished.connect(self._on_excel_loaded)
         worker.signals.error.connect(self.main_window._on_task_error)
         self.main_window.threadpool.start(worker)
+

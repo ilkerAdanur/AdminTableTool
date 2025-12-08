@@ -8,17 +8,19 @@ import functools
 import json
 from datetime import datetime # get_yeni_kayit_yolu için gerekli
 
+from src.ui.report_header_editor import HeaderEditorView
+
 from PyQt6.QtWidgets import (
     QWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, 
     QHeaderView, QMenu, QMessageBox, QInputDialog,
     QLabel, QLineEdit, QHBoxLayout, QDateEdit, QPushButton, QComboBox,QFileDialog, QSizePolicy
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QDate
+from PyQt6.QtCore import Qt, pyqtSignal, QDate, QUrl
 
 from src.core.tasks import run_dynamic_report_task 
 from src.core.file_exporter import task_run_excel, get_yeni_kayit_yolu 
 from src.threading.workers import Worker
-from PyQt6.QtGui import QColor, QFont, QPixmap,QDropEvent, QDragEnterEvent
+from PyQt6.QtGui import QColor, QFont, QPixmap,QDropEvent, QDragEnterEvent, QDesktopServices
 
 # <-- 2. Modüle özel logger'ı tanımlayın
 logger = logging.getLogger(__name__)
@@ -66,6 +68,7 @@ class DynamicTableWidget(QTableWidget):
         self.setColumnCount(1)
         self.setHorizontalHeaderLabels(["[Yeni Sütun Ekle]"])
         self.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasText():
@@ -87,71 +90,6 @@ class DynamicTableWidget(QTableWidget):
         self.horizontalHeader().columns_dropped.emit(dropped_columns, target_index)
         event.acceptProposedAction()
 
-class DraggableImageLabel(QLabel):
-    """Resim sürüklenip bırakılabilen özel etiket."""
-    imageDropped = pyqtSignal(str) # Resim yolu sinyali
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setText("Rapor Logosu / Resmi\n(Sürükle & Bırak)")
-        self.setStyleSheet("""
-            QLabel {
-                border: 2px dashed #aaa;
-                border-radius: 5px;
-                color: #555;
-                background-color: #f9f9f9;
-            }
-            QLabel:hover {
-                background-color: #eee;
-                border-color: #777;
-            }
-        """)
-        self.setAcceptDrops(True)
-        self.setFixedHeight(100) # Sabit yükseklik
-        self.current_image_path = None
-
-    def dragEnterEvent(self, event: QDragEnterEvent):
-        if event.mimeData().hasUrls():
-            event.accept()
-        else:
-            event.ignore()
-
-    def dropEvent(self, event: QDropEvent):
-        urls = event.mimeData().urls()
-        if urls:
-            file_path = urls[0].toLocalFile()
-            if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')):
-                self.set_image(file_path)
-                self.imageDropped.emit(file_path) # Ana pencereye bildir
-            else:
-                QMessageBox.warning(self, "Hata", "Lütfen geçerli bir resim dosyası sürükleyin.")
-
-    def set_image(self, path):
-        """Resmi yükler ve ölçekler."""
-        if path and os.path.exists(path):
-            self.current_image_path = path
-            pixmap = QPixmap(path)
-            # Resmi etiketin yüksekliğine göre ölçekle (oranı koru)
-            scaled_pixmap = pixmap.scaledToHeight(self.height() - 10, Qt.TransformationMode.SmoothTransformation)
-            self.setPixmap(scaled_pixmap)
-            self.setStyleSheet("border: none; background-color: transparent;") # Çerçeveyi kaldır
-        else:
-            self.clear_image()
-
-    def clear_image(self):
-        self.current_image_path = None
-        self.clear()
-        self.setText("Rapor Logosu / Resmi\n(Sürükle & Bırak)")
-        self.setStyleSheet("""
-            QLabel {
-                border: 2px dashed #aaa;
-                border-radius: 5px;
-                color: #555;
-                background-color: #f9f9f9;
-            }
-        """)
-
 class DynamicTableTab(QWidget):
     """
     Yeni 'Veri Tablosu (Dönüştürme)' sekmesi.
@@ -167,10 +105,11 @@ class DynamicTableTab(QWidget):
             self.is_unsaved = False        # Değişiklik var mı?
 
             self.header_image_path = None
+            self.last_exported_excel_path = None
 
             layout = QVBoxLayout(self)
             layout.setContentsMargins(5, 5, 5, 5) 
-
+            
             # --- ÜST KONTROL PANELİ ---
             controls_layout = QHBoxLayout()
 
@@ -183,6 +122,9 @@ class DynamicTableTab(QWidget):
             self.date_Bitis = QDateEdit(QDate.currentDate())
             self.date_Bitis.setCalendarPopup(True)
             controls_layout.addWidget(self.date_Bitis)
+
+            self.header_editor = HeaderEditorView()
+            layout.addWidget(self.header_editor)
 
             controls_layout.addWidget(QLabel("Tarih Sütunu:"))
             self.date_column_combo = QComboBox()
@@ -214,12 +156,16 @@ class DynamicTableTab(QWidget):
             self.btn_export_excel.setEnabled(False) # Veri gelene kadar pasif
             controls_layout.addWidget(self.btn_export_excel)
 
+            self.btn_open_excel = QPushButton("Exceli Aç")
+            self.btn_open_excel.setStyleSheet("background-color: #8BC34A; color: white; padding: 5px; font-weight: bold;")
+            self.btn_open_excel.setEnabled(False) # Başlangıçta pasif (henüz dosya yok)
+            
+
+            controls_layout.addWidget(self.btn_open_excel)
+
+
             layout.addLayout(controls_layout) 
             
-            self.image_label = DraggableImageLabel()
-            self.image_label.imageDropped.connect(self.handle_image_drop)
-            layout.addWidget(self.image_label)
-
             # --- TABLO ---
             self.table = DynamicTableWidget(self)
             layout.addWidget(self.table)
@@ -232,8 +178,9 @@ class DynamicTableTab(QWidget):
             
             self.btn_run_report.clicked.connect(self.run_report)
             self.btn_reset_report.clicked.connect(self.reset_report)
-            self.btn_export_excel.clicked.connect(self.export_to_excel) # <-- BAĞLANTI
-            
+            self.btn_export_excel.clicked.connect(self.export_to_excel) 
+            self.btn_open_excel.clicked.connect(self.open_generated_excel)
+
             self.date_Baslangic.dateChanged.connect(self.mark_as_unsaved)
             self.date_Bitis.dateChanged.connect(self.mark_as_unsaved)
             self.date_column_combo.currentIndexChanged.connect(self.mark_as_unsaved)
@@ -243,9 +190,6 @@ class DynamicTableTab(QWidget):
 
             logger.debug("DynamicTableTab başlatıldı (Kayıt özelliği aktif).")
 
-    def handle_image_drop(self, path):
-        self.header_image_path = path
-        self.mark_as_unsaved()
     def mark_as_unsaved(self):
         """Bir değişiklik yapıldığında çağrılır. Sekme adına '*' ekler."""
         if not self.is_unsaved:
@@ -290,16 +234,16 @@ class DynamicTableTab(QWidget):
     def _write_to_file(self, file_path):
         """Mevcut ayarları (JSON olarak) dosyaya yazar."""
         try:
-            # Kaydedilecek veriyi hazırla
             save_data = {
                 "file_type": "dynamic_table_config",
-                "version": "1.0",
+                "version": "1.1",
                 "start_date": self.date_Baslangic.date().toString("yyyy-MM-dd"),
                 "end_date": self.date_Bitis.date().toString("yyyy-MM-dd"),
-                "date_column": self.date_column_combo.currentText(), # Text olarak sakla
+                "date_column": self.date_column_combo.currentText(),
                 "agg_type": self.agg_type_combo.currentText(),
                 "defined_columns": self.defined_columns,
-                "header_image": self.header_image_path
+                "header_image": self.header_image_path,
+                "last_excel_path": self.last_exported_excel_path # <-- EKLENDİ
             }
             
             with open(file_path, 'w', encoding='utf-8') as f:
@@ -345,6 +289,16 @@ class DynamicTableTab(QWidget):
             else:
                 self.header_image_path = None
                 self.image_label.clear_image()
+
+            last_excel = data.get("last_excel_path")
+            if last_excel and os.path.exists(last_excel):
+                self.last_exported_excel_path = last_excel
+                self.btn_open_excel.setEnabled(True)
+                # Butona ipucu ekle ki kullanıcı hangi dosya olduğunu görsün
+                self.btn_open_excel.setToolTip(f"Bağlı Excel: {os.path.basename(last_excel)}")
+            else:
+                self.last_exported_excel_path = None
+                self.btn_open_excel.setEnabled(False)
 
             # 4. Dosya yolunu sakla ve başlığı güncelle
             self.current_file_path = file_path
@@ -698,8 +652,24 @@ class DynamicTableTab(QWidget):
             QMessageBox.critical(self, "Hata", "Kayıt yolu oluşturulamadı.")
             return
 
-        logger.info(f"Excel dışa aktarılıyor: {save_path}")
+        temp_header_path = None
+        try:
+            # Editörden bitmiş halinin resmini al
+            header_pixmap = self.header_editor.get_header_image()
+            
+            # Geçici bir dosyaya kaydet (temp klasörü daha iyi olur ama şimdilik proje dizini)
+            temp_header_path = os.path.abspath("temp_header_export.png")
+            header_pixmap.save(temp_header_path, "PNG")
+            logger.info(f"Header tasarımı geçici olarak kaydedildi: {temp_header_path}")
+        except Exception as e:
+            logger.error(f"Header resmi oluşturulamadı: {e}")
+
         self.main_window.show_loading_dialog("Excel dosyası kaydediliyor...")
+
+        
+        logger.info(f"Excel dışa aktarılıyor: {save_path}")
+
+        
         
         # Worker ile kaydet
         # (df index'ini de kaydetmek isteyebiliriz, özellikle özet modunda)
@@ -707,7 +677,11 @@ class DynamicTableTab(QWidget):
         if df_to_save.index.name: # Eğer index varsa (Tarih) onu da sütun yap
             df_to_save.reset_index(inplace=True)
 
-        worker = Worker(task_run_excel, save_path, df_to_save,header_image_path=self.header_image_path)
+        worker = Worker(
+            task_run_excel,
+            save_path,
+            df_to_save,
+            header_image_path=temp_header_path)
         
         # İşlem bitince main_window'daki sekme açma fonksiyonunu çağır
         worker.signals.finished.connect(
@@ -719,11 +693,31 @@ class DynamicTableTab(QWidget):
     def _on_export_complete(self, save_path, result_path):
         """Excel kaydı bittiğinde çalışır."""
         self.main_window.close_loading_dialog()
-        QMessageBox.information(self, "Başarılı", f"Dosya oluşturuldu:\n{save_path}\n\nYeni sekmede açılıyor...")
+        QMessageBox.information(self, "Başarılı", f"Dosya oluşturuldu:\n{save_path}")
         
-        # ANA PENCEREYE SİNYAL GÖNDER: Dosyayı yeni sekmede aç
+        # --- YENİ: Dosya yolunu kaydet ve açma butonunu aktif et ---
+        self.last_exported_excel_path = save_path
+
+        self.btn_open_excel.setEnabled(True)
+        
+        # -----------------------------------------------------------
+        
+        # (Opsiyonel: Eğer otomatik sekme açma özelliğini kullanıyorsanız o kalsın)
         if hasattr(self.main_window, "open_generated_excel_tab"):
             self.main_window.open_generated_excel_tab(save_path)
+    
+    def open_generated_excel(self):
+        """Son oluşturulan Excel dosyasını sistem varsayılan uygulamasıyla açar."""
+        if self.last_exported_excel_path and os.path.exists(self.last_exported_excel_path):
+            try:
+                # İşletim sisteminin varsayılan programıyla aç (Windows'ta Excel)
+                QDesktopServices.openUrl(QUrl.fromLocalFile(self.last_exported_excel_path))
+                logger.info(f"Excel dosyası açılıyor: {self.last_exported_excel_path}")
+            except Exception as e:
+                logger.error(f"Dosya açılırken hata: {e}")
+                QMessageBox.warning(self, "Hata", f"Dosya açılamadı:\n{e}")
+        else:
+            QMessageBox.warning(self, "Dosya Bulunamadı", "Henüz oluşturulmuş veya kaydedilmiş bir Excel dosyası yok.")
 
     
 

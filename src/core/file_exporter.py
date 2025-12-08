@@ -59,7 +59,7 @@ def get_yeni_kayit_yolu(format, start_date_obj, end_date_obj, target_table, temp
 # src/core/file_exporter.py
 
 def task_run_excel(kayit_yolu, df_to_save, header_image_path=None):
-    """(Worker Görevi) Excel kaydetme işi. Özetleri ve resmi ekler."""
+    """(Worker Görevi) Excel kaydetme işi. Hizalama ve birleştirme eklendi."""
     logger.info(f"Çalışan iş parçacığı: Excel kaydetme başlatıldı -> {kayit_yolu}")
     
     # 1. MultiIndex Sütunları Düzleştir
@@ -67,78 +67,104 @@ def task_run_excel(kayit_yolu, df_to_save, header_image_path=None):
     if isinstance(df_export.columns, pd.MultiIndex):
         df_export.columns = ['_'.join(map(str, col)).strip() for col in df_export.columns.values]
     
-    # 2. Özet Verilerini Hesapla (LİSTE YÖNTEMİYLE)
-    summary_data = []
+    # 2. Özet DataFrame'ini Hazırla
     summary_index = ["TOPLAM", "ORTALAMA", "MAKSİMUM", "MİNİMUM"]
-    funcs = ['sum', 'mean', 'max', 'min']
+    df_summary = pd.DataFrame(index=summary_index, columns=df_export.columns)
     
-    for func in funcs:
-        row_values = [] 
+    # 3. Hesaplamaları Yap ve Yerlerine Koy
+    for col in df_export.columns:
+        if col == df_export.columns[0]: continue # İlk sütun (Tarih) hesaplanmaz
         
-        for j in range(len(df_export.columns)):
-            series = df_export.iloc[:, j]
+        series = df_export[col]
+        if pd.api.types.is_datetime64_any_dtype(series): continue
 
-            # --- DÜZELTME: İlk sütun (Genelde Tarih) ise ve tipi tarih/obje ise atla ---
-            # Sadece 0. sütun (Tarih) için kontrol etmek en güvenlisidir.
-            if j == 0: 
-                row_values.append(None)
-                continue
+        try:
+            numeric_values = pd.to_numeric(series.values, errors='coerce')
+            if pd.isna(numeric_values).all(): continue
             
-            # Ayrıca tip kontrolü de yapalım (Her ihtimale karşı)
-            if pd.api.types.is_datetime64_any_dtype(series):
-                row_values.append(None)
-                continue
+            temp_series = pd.Series(numeric_values)
+            df_summary.at["TOPLAM", col] = temp_series.sum()
+            df_summary.at["ORTALAMA", col] = temp_series.mean()
+            df_summary.at["MAKSİMUM", col] = temp_series.max()
+            df_summary.at["MİNİMUM", col] = temp_series.min()
+        except Exception:
+            continue
 
-            # Güvenli dönüşüm ve hesaplama
-            try:
-                numeric_values = pd.to_numeric(series.values, errors='coerce')
-                
-                if pd.isna(numeric_values).all():
-                    row_values.append(None)
-                else:
-                    temp_series = pd.Series(numeric_values)
-                    if func == 'sum': val = temp_series.sum()
-                    elif func == 'mean': val = temp_series.mean()
-                    elif func == 'max': val = temp_series.max()
-                    elif func == 'min': val = temp_series.min()
-                    else: val = None
-                    row_values.append(val)
-            except:
-                row_values.append(None)
-
-        summary_data.append(row_values)
-        
-    # Özet DataFrame'i oluştur (Sütunlar df_export ile aynı)
-    df_summary = pd.DataFrame(summary_data, columns=df_export.columns, index=summary_index)
-    
-    # 3. Excel Yazıcıyı Başlat
+    # 4. Excel Yazıcıyı Başlat
     with pd.ExcelWriter(kayit_yolu, engine='xlsxwriter') as writer:
         workbook = writer.book
         worksheet = workbook.add_worksheet('Rapor')
         
-        # --- RESİM YERLEŞTİRME VE SATIR KAYDIRMA ---
+        # Formatlar
+        merge_format = workbook.add_format({
+            'bold': True, 
+            'border': 1, 
+            'align': 'center', 
+            'valign': 'vcenter',
+            'bg_color': '#FFFFFF' # Beyaz arka plan
+        })
+        
+        # --- RESİM YERLEŞTİRME (A Sütunu boş kalacak şekilde B'ye) ---
         start_row_offset = 0
         if header_image_path and os.path.exists(header_image_path):
             try:
-                worksheet.insert_image('A1', header_image_path, {'x_scale': 0.8, 'y_scale': 0.8})
+                # 1. satır, 1. sütun (B1 hücresi)
+                worksheet.insert_image(0, 1, header_image_path, {'x_scale': 0.8, 'y_scale': 0.8})
                 start_row_offset = 8 
             except Exception as e:
                 logger.error(f"Excel'e resim eklenirken hata: {e}")
         
-        # A. Özet Tablosunu Yaz
-        # header=False (Sütun başlıklarını yazma, çünkü asıl tabloda yazacağız)
-        df_summary.to_excel(writer, sheet_name='Rapor', startrow=start_row_offset, header=False)
+        # --- A. ÖZET TABLOSUNU YAZ ---
+        # Özet tablosu C sütunundan (Column 2) başlamalı.
+        # A ve B sütunları (Sıra ve Tarih) başlıklar için ayrılacak.
         
-        # B. Asıl Veriyi Yaz (Özet + 1 satır boşluk sonrasına)
+        # Ancak df_summary içinde Tarih sütunu (boş olsa da) var. 
+        # Onu yazdırmamak için sadece veri sütunlarını alıyoruz.
+        summary_data_only = df_summary.iloc[:, 1:] # İlk sütunu (Tarih) atla
+        
+        summary_start_col = 3 # C sütunu (0=A, 1=B, 2=C)
+        
+        summary_data_only.to_excel(
+            writer, 
+            sheet_name='Rapor', 
+            startrow=start_row_offset, 
+            startcol=summary_start_col, 
+            header=False,
+            index=False # Sol başlıkları (TOPLAM vb.) biz elle yazacağız
+        )
+        
+        # --- B. SOL TARAFI BİRLEŞTİR VE YAZ (TOPLAM, ORTALAMA...) ---
+        # A ve B sütunlarını birleştirip başlıkları yaz
+        titles = ["TOPLAM", "ORTALAMA", "MAKSİMUM", "MİNİMUM"]
+        for i, title in enumerate(titles):
+            row = start_row_offset + i
+            # A ve B sütunlarını birleştir (0 ve 1)
+            worksheet.merge_range(row, 1, row, 2, title, merge_format)
+
+        # --- C. ASIL VERİ TABLOSUNU YAZ ---
         data_start_row = start_row_offset + 5 
-        df_export.to_excel(writer, sheet_name='Rapor', startrow=data_start_row, index=False) # index=False ÖNEMLİ
+        
+        # index=True -> "Sıra" sütunu A sütununa (0) gelir.
+        # df_export'un ilk sütunu (Tarih) B sütununa (1) gelir.
+        # Veri sütunları C sütununa (2) gelir.
+        # Bu, yukarıdaki özet tablosuyla (C'den başlayan) tam hizalanır.
+        
+        df_export.to_excel(
+            writer, 
+            sheet_name='Rapor', 
+            startrow=data_start_row, 
+            startcol=1, 
+            index=True, 
+            index_label="Sıra"
+        )
         
         # Sütun Genişliği
-        worksheet.set_column(0, 0, 20) 
+        worksheet.set_column(0, 0, 8)  # A (Sıra) dar
+        worksheet.set_column(1, 1, 20) # B (Tarih) geniş
+        worksheet.set_column(2, len(df_export.columns)+1, 15) # Veriler orta
         
     logger.info("Çalışan iş parçacığı: Excel kaydetme bitti.")
     return kayit_yolu
-
 
 def task_run_pdf(kayit_yolu, df_to_save):
     """(Worker Görevi) ARKA PLANDA çalışacak PDF kaydetme işi."""

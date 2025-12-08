@@ -495,16 +495,24 @@ class MainWindow(QMainWindow):
         """(Callback) Herhangi bir Worker'da hata olursa çalışır."""
         self.close_loading_dialog()
         
-        # exc_info=True, hatanın tam traceback'ini loga basar.
         logger.error(f"Ana arayüz: Görev hatası alındı: {hata_mesaji}", exc_info=True)
         QMessageBox.critical(self, "Hata", f"İşlem sırasında bir hata oluştu:\n\n{hata_mesaji}")
         
-        self.db_config = {}
-        self.db_engine = None
-        self.full_schema_data = {}
-        self.db_explorer.clear_tree()
-        self.update_connection_status("Hata oluştu. Bağlantı kesildi.", is_connected=False)
-        logger.info("Hata nedeniyle bağlantı durumu sıfırlandı.") # <-- LOG
+        # --- DÜZELTME: Her hatada bağlantıyı koparma! ---
+        # Sadece veritabanı bağlantısı ile ilgili kritik hatalarda kopar.
+        # Örneğin: "Connection refused", "Login failed", "Adaptive Server is unavailable" vb.
+        
+        kritik_hatalar = ["Connection refused", "Login failed", "SQL Server", "access denied", "Database error"]
+        
+        if any(hata in str(hata_mesaji) for hata in kritik_hatalar):
+            logger.warning("Kritik veritabanı hatası algılandı. Bağlantı sıfırlanıyor.")
+            self.db_config = {}
+            self.db_engine = None
+            self.full_schema_data = {}
+            self.db_explorer.clear_tree()
+            self.update_connection_status("Hata oluştu. Bağlantı kesildi.", is_connected=False)
+        else:
+            logger.info("Hata kritik değil, bağlantı korunuyor.")
 
     def update_connection_status(self, message, is_connected):
         """Bağlantı durumunu (ışık) ve etiketleri günceller."""
