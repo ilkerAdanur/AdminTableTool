@@ -52,12 +52,27 @@ def create_db_engine(config):
             engine = create_engine(engine_url)
             
         elif db_type == "postgres":
-            # PostgreSQL User/Pass mantığı
             engine_url = (
                 f"postgresql+psycopg2://{config.get('user')}:{config.get('password')}@"
                 f"{config.get('host')}:{config.get('port')}/{config.get('database')}"
             )
             engine = create_engine(engine_url)
+
+        # --- YENİ EKLENEN KISIM: MySQL (Hostinger) ---
+        elif db_type == "mysql":
+            # Gerekli kütüphane: pip install pymysql
+            import urllib.parse
+            
+            user = urllib.parse.quote_plus(config.get('user'))
+            password = urllib.parse.quote_plus(config.get('password'))
+            host = config.get('host')
+            port = config.get('port', '3306')
+            db_name = config.get('database')
+            
+            # Bağlantı cümlesi
+            engine_url = f"mysql+pymysql://{user}:{password}@{host}:{port}/{db_name}"
+            engine = create_engine(engine_url)
+        # ---------------------------------------------
 
         else:
             raise ValueError(f"Desteklenmeyen veritabanı türü: {db_type}")

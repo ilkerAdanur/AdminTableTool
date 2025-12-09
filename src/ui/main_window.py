@@ -71,9 +71,48 @@ class MainWindow(QMainWindow):
         self._setup_docks()
         self._setup_file_menu()
         self._connect_signals()
+        self._setup_profile_menu()
+
+        self.logout_requested = False
 
         self.update_connection_status("Bağlı Değil", is_connected=False)
         self.mainTabWidget.tabCloseRequested.connect(self._close_tab)
+
+    def _setup_profile_menu(self):
+        """Profil menüsünü giriş yapan kullanıcıya göre düzenler."""
+        from src.core.user_manager import get_current_user
+        
+        current_user = get_current_user()
+        if not current_user:
+            return
+
+        self.menuProfil.setTitle(f"👤 {current_user.username}")
+        
+        self.menuProfil.clear()
+        
+        # 1. Profilim Aksiyonu
+        action_profile = self.menuProfil.addAction("Profilim")
+        action_profile.triggered.connect(self.open_profile_details)
+        
+        self.menuProfil.addSeparator()
+        
+        # 2. Çıkış Yap Aksiyonu
+        action_logout = self.menuProfil.addAction("Çıkış Yap")
+        action_logout.triggered.connect(self.logout_application)
+
+    def open_profile_details(self):
+        """Profil detay ekranını açar (İleride geliştirilecek)."""
+        QMessageBox.information(self, "Profilim", "Profil detay ekranı yapım aşamasındadır.")
+
+    def logout_application(self):
+        """Çıkış yap bayrağını kaldırır ve pencereyi kapatır."""
+        reply = QMessageBox.question(self, "Çıkış Yap", "Oturumu kapatmak istediğinize emin misiniz?",
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            logger.info("Kullanıcı çıkış yapıyor...")
+            self.logout_requested = True # Bayrağı kaldır
+            self.close() # Pencereyi kapat (main.py döngüyü yakalayacak)
 
     def save_current_tab(self):
         """Aktif sekmedeki save_file fonksiyonunu tetikler."""
@@ -95,16 +134,14 @@ class MainWindow(QMainWindow):
             self,
             "Dosya Aç",
             "",
-            "AdminTableTool Dosyası (*.att);;JSON Dosyası (*.json);;Tüm Dosyalar (*.*)"
+            "AdminTableTool Dosyası (*.tuem);;JSON Dosyası (*.json);;Tüm Dosyalar (*.*)" # <-- GÜNCELLENDİ
         )
         
         if file_path:
-            self.load_att_file(file_path)
+            self.load_tuem_file(file_path)
 
-    def load_att_file(self, file_path):
-        """Verilen yoldaki .att dosyasını yeni bir sekmede açar."""
-        # Önce dosya türünü anlamaya çalış (basitçe uzantı veya içeriğe bakılabilir)
-        # Şimdilik varsayılan olarak DynamicTableTab açıyoruz.
+    def load_tuem_file(self, file_path): 
+        """Verilen yoldaki .tuem dosyasını yeni bir sekmede açar."""
         
         tab_name = os.path.basename(file_path).split('.')[0]
         
@@ -184,12 +221,32 @@ class MainWindow(QMainWindow):
             logger.warning("UYARI: 'actionShow_Excel' ui dosyasında bulunamadı.")
 
     def _close_tab(self, index):
+        """Sekmeyi kapatmadan önce kaydedilmemiş değişiklik kontrolü yapar."""
         widget = self.mainTabWidget.widget(index)
-        tab_name = self.mainTabWidget.tabText(index)
+        
+        # --- YENİ: Kaydedilmemiş Değişiklik Kontrolü ---
+        # Eğer widget'ın 'is_unsaved' özelliği varsa ve True ise uyar
+        if hasattr(widget, "is_unsaved") and widget.is_unsaved:
+            tab_name = self.mainTabWidget.tabText(index).replace("*", "") # Yıldızı temizle
+            
+            reply = QMessageBox.question(
+                self, 
+                "Kaydedilmemiş Değişiklikler", 
+                f"'{tab_name}' dosyasında kaydedilmemiş değişiklikler var.\n\nKaydetmeden kapatmak istediğinize emin misiniz?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            # Eğer kullanıcı 'Hayır' derse (yani kapatmaktan vazgeçerse)
+            if reply == QMessageBox.StandardButton.No:
+                return 
+        # -----------------------------------------------
+
+        tab_name_log = self.mainTabWidget.tabText(index)
         if widget:
             widget.deleteLater()
         self.mainTabWidget.removeTab(index)
-        logger.info(f"Sekme kapatıldı: '{tab_name}' (index {index})") # <-- LOG
+        logger.info(f"Sekme kapatıldı: '{tab_name_log}' (index {index})")
 
     # --- Sekme Oluşturma Fonksiyonları ---
     

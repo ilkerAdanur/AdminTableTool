@@ -185,10 +185,10 @@ class DynamicTableTab(QWidget):
             self.date_Bitis.dateChanged.connect(self.mark_as_unsaved)
             self.date_column_combo.currentIndexChanged.connect(self.mark_as_unsaved)
             self.agg_type_combo.currentIndexChanged.connect(self.mark_as_unsaved)
-
+            self.header_editor.scene.changed.connect(self.mark_as_unsaved)
             
 
-            logger.debug("DynamicTableTab başlatıldı (Kayıt özelliği aktif).")
+            logger.debug("DynamicTableTab başlatıldı.")
 
     def mark_as_unsaved(self):
         """Bir değişiklik yapıldığında çağrılır. Sekme adına '*' ekler."""
@@ -224,7 +224,7 @@ class DynamicTableTab(QWidget):
             self,
             "Rapor Ayarlarını Kaydet",
             "", # Varsayılan klasör
-            "AdminTableTool Dosyası (*.att);;JSON Dosyası (*.json)" # Özel uzantımız .att olsun
+            "AdminTableTool Dosyası (*.tuem);;JSON Dosyası (*.json)" 
         )
         
         if file_path:
@@ -234,16 +234,19 @@ class DynamicTableTab(QWidget):
     def _write_to_file(self, file_path):
         """Mevcut ayarları (JSON olarak) dosyaya yazar."""
         try:
+            # Editördeki veriyi al (Resimler, yazılar, renkler)
+            header_data = self.header_editor.get_scene_data()
+
             save_data = {
                 "file_type": "dynamic_table_config",
-                "version": "1.1",
+                "version": "1.2", # Versiyon artırıldı
                 "start_date": self.date_Baslangic.date().toString("yyyy-MM-dd"),
                 "end_date": self.date_Bitis.date().toString("yyyy-MM-dd"),
                 "date_column": self.date_column_combo.currentText(),
                 "agg_type": self.agg_type_combo.currentText(),
                 "defined_columns": self.defined_columns,
-                "header_image": self.header_image_path,
-                "last_excel_path": self.last_exported_excel_path # <-- EKLENDİ
+                "last_excel_path": self.last_exported_excel_path,
+                "header_design": header_data # <-- YENİ: Tüm tasarımı gömüyoruz
             }
             
             with open(file_path, 'w', encoding='utf-8') as f:
@@ -258,55 +261,54 @@ class DynamicTableTab(QWidget):
             QMessageBox.critical(self, "Hata", f"Dosya kaydedilemedi:\n{e}")
 
     def load_from_file(self, file_path):
-        """Kaydedilmiş .att veya .json dosyasını yükler ve arayüzü kurar."""
+        """Kaydedilmiş .tuem veya .json dosyasını yükler."""
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
-            # Versiyon kontrolü (İleride yapı değişirse diye)
             if data.get("file_type") != "dynamic_table_config":
                 raise ValueError("Bu dosya geçerli bir AdminTableTool yapılandırma dosyası değil.")
 
-            # 1. Tarihleri Yükle
+            # ... (Tarih ve Combobox kodları AYNI) ...
             self.date_Baslangic.setDate(QDate.fromString(data["start_date"], "yyyy-MM-dd"))
             self.date_Bitis.setDate(QDate.fromString(data["end_date"], "yyyy-MM-dd"))
             
-            # 2. Comboboxları Ayarla
             idx_date = self.date_column_combo.findText(data["date_column"])
             if idx_date >= 0: self.date_column_combo.setCurrentIndex(idx_date)
             
             idx_agg = self.agg_type_combo.findText(data["agg_type"])
             if idx_agg >= 0: self.agg_type_combo.setCurrentIndex(idx_agg)
 
-            # 3. Sütunları Geri Yükle
             self.defined_columns = data["defined_columns"]
             self.refresh_table_headers()
             
-            img_path = data.get("header_image")
-            if img_path and os.path.exists(img_path):
-                self.header_image_path = img_path
-                self.image_label.set_image(img_path)
+            # --- YENİ: Başlık Tasarımını Yükle ---
+            header_design = data.get("header_design")
+            if header_design:
+                self.header_editor.load_scene_data(header_design)
             else:
-                self.header_image_path = None
-                self.image_label.clear_image()
+                # Eski versiyon uyumluluğu (Sadece resim yolu varsa)
+                old_img_path = data.get("header_image")
+                if old_img_path and os.path.exists(old_img_path):
+                    # Eski yöntemi manuel olarak sahneye ekleyebiliriz ama 
+                    # şimdilik temiz sayfa açmak daha güvenli.
+                    pass 
+            # -------------------------------------
 
+            # ... (Excel butonu ve diğer kodlar AYNI) ...
             last_excel = data.get("last_excel_path")
             if last_excel and os.path.exists(last_excel):
                 self.last_exported_excel_path = last_excel
                 self.btn_open_excel.setEnabled(True)
-                # Butona ipucu ekle ki kullanıcı hangi dosya olduğunu görsün
                 self.btn_open_excel.setToolTip(f"Bağlı Excel: {os.path.basename(last_excel)}")
             else:
                 self.last_exported_excel_path = None
                 self.btn_open_excel.setEnabled(False)
 
-            # 4. Dosya yolunu sakla ve başlığı güncelle
             self.current_file_path = file_path
             self.mark_as_saved()
             
             logger.info(f"Dosya başarıyla yüklendi: {file_path}")
-            # İsteğe bağlı: Dosya açılır açılmaz raporu çalıştır
-            # self.run_report() 
 
         except Exception as e:
             logger.error(f"Dosya yükleme hatası: {e}")
@@ -457,6 +459,7 @@ class DynamicTableTab(QWidget):
         worker.signals.finished.connect(self._on_report_finished) 
         worker.signals.error.connect(self._on_report_error)
         self.main_window.threadpool.start(worker)
+    
     def _on_report_finished(self, final_df):
         self.main_window.close_loading_dialog()
         if final_df is None: return
@@ -465,11 +468,11 @@ class DynamicTableTab(QWidget):
         self.current_df = final_df # Veriyi sakla
         self._populate_table(final_df)
         self.btn_export_excel.setEnabled(not final_df.empty)
+    
     def _on_report_error(self, error_message):
         self.main_window.close_loading_dialog()
         logger.error(f"Rapor hatası: {error_message}")
         QMessageBox.critical(self, "Hata", f"Rapor hatası:\n{error_message}")
-
 
     def _populate_table(self, df):
         self.table.setUpdatesEnabled(False)

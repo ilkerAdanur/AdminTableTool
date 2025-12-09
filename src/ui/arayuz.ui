@@ -99,7 +99,7 @@
     <property name="title">
      <string>Profil</string>
     </property>
-    <addaction name="actionAdmin_Giri_i"/>
+    <!-- <addaction name="actionAdmin_Giri_i"/> -->
    </widget>
    <addaction name="menuDosya"/>
    <addaction name="menuAyarlar"/>
@@ -162,11 +162,11 @@
     <string>MySQL</string>
    </property>
   </action>
-  <action name="actionAdmin_Giri_i">
+  <!-- <action name="actionAdmin_Giri_i">
    <property name="text">
     <string>Admin Girişi</string>
    </property>
-  </action>
+  </action> -->
   <action name="actionTaslak_Duzenle">
    <property name="text">
     <string>Rapor Taslaklarını Yönet...</string>

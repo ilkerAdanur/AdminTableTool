@@ -35,6 +35,7 @@ var/
 pip-log.txt
 pip-delete-this-directory.txt
 
+
 # Unit test / coverage reports
 htmlcov/
 .tox/
@@ -66,3 +67,8 @@ coverage.xml
 # MacOS / Windows junk files
 .DS_Store
 Thumbs.db
+
+config.py
+src/core/config.py
+AdminTableTool_Session.json
+
